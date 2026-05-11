@@ -7,16 +7,17 @@
 # =============================================================================
 
 
-import os, pickle, glob, imageio, re, gc
+import os, pickle, glob, imageio, re, gc, shutil, tempfile
 import xarray as xr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+import geopandas as gpd
 from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 from scipy.ndimage import label, binary_dilation, center_of_mass, distance_transform_edt
-from matplotlib.path import Path
+from matplotlib.path import Path as mPath
 from matplotlib.patches import PathPatch
 from collections import deque
 from shapely.geometry import Polygon
@@ -354,10 +355,16 @@ def find_high_value_pixels(data, center_lat, center_lon, radius_km, SPM_threshol
     return mask
 
 
-def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefile,
-                  lon_range_of_the_map_to_plot, lat_range_of_the_map_to_plot, 
-                  bathymetric_threshold, bathymetry_data_aligned_to_reduced_map, thresholds,
+def make_the_plot(path_to_the_figure_file_to_save, 
+                  ds, 
+                  ds_reduced, 
+                  lon_range_of_the_map_to_plot, 
+                  lat_range_of_the_map_to_plot, 
+                  bathymetric_threshold, 
+                  bathymetry_data_aligned_to_reduced_map, 
+                  thresholds,
                   plot_the_plume_area,
+                  coast_shape=None,
                   mask_area=None, 
                   close_river_mouth_area=None,
                   pixel_done=None,
@@ -374,8 +381,6 @@ def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefi
        Original dataset to be plotted on the first subplot.
    ds_reduced : xarray.DataArray
        Processed or reduced dataset used to determine color bar limits and optional masking.
-   coast_shapefile : geopandas.GeoDataFrame
-       Shapefile of coastal boundary used for overlaying on the plots.
    lon_range_of_the_map_to_plot : tuple of float
        Longitude range (min, max) for both subplots.
    lat_range_of_the_map_to_plot : tuple of float
@@ -388,6 +393,8 @@ def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefi
        Dictionary containing SPM thresholds to describe the plume area in the title (e.g., {"threshold1": value1, "threshold2": value2}).
    plot_the_plume_area : bool
        If `True`, plots the plume area on the second subplot; otherwise, the second subplot contains a placeholder message.
+   coast_shape: geopandas.GeoDataFrame
+       Shapefile of coastal boundary used for overlaying on the plots. Optional, default is `None`.
    mask_area : xarray.DataArray, optional
        Mask indicating the plume area to highlight, with `True` values for plume pixels. Default is `None`.
    pixel_done : xarray.DataArray, optional
@@ -414,7 +421,7 @@ def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefi
    >>> # Example inputs
    >>> ds = xr.DataArray(...)
    >>> ds_reduced = xr.DataArray(...)
-   >>> coast_shapefile = gpd.read_file("path_to_shapefile.shp")
+   >>> coast_shapefolder = geopandas.GeoDataFrame(...)
    >>> lon_range = (-10, 10)
    >>> lat_range = (40, 50)
    >>> bathymetry = xr.DataArray(...)
@@ -423,16 +430,16 @@ def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefi
    ...     "output_figure",
    ...     ds,
    ...     ds_reduced,
-   ...     coast_shapefile,
    ...     lon_range,
    ...     lat_range,
+   ...     coast_shape,
    ...     bathymetric_threshold=50,
    ...     bathymetry_data_aligned_to_reduced_map=bathymetry,
    ...     thresholds=thresholds,
    ...     plot_the_plume_area=True
    ... )
    """
-    
+
     # Determine color bar limits based on the dataset and optional mask
     if mask_area is not None : 
         # Use the mask area to calculate the color bar range
@@ -450,17 +457,17 @@ def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefi
         # max_color_bar = np.nanquantile(ds.values, 0.99)
         min_color_bar = np.max([np.nanmin(ds_reduced.values), 0.1]) 
     
-    # max_color_bar = 1.5
-    # min_color_bar = 0.6
-    
+        # max_color_bar = 1.5
+        # min_color_bar = 0.6
+
     # Create a figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
     # Plot the original dataset on the first subplot
     plt.subplot(1, 2, 1)
     ds.plot(vmin = min_color_bar, vmax = max_color_bar, norm=colors.LogNorm())
-    if coast_shapefile is not None:
-        coast_shapefile.boundary.plot(ax=ax1, linewidth=1, edgecolor='black')
+    if coast_shape is not None:
+        coast_shape.boundary.plot(ax=ax1, linewidth=1, edgecolor='black')
 
     # Set plot titles and axis labels for the first subplot
     ax1.set_title('Original map')
@@ -521,8 +528,8 @@ def make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefi
                          levels=[0.5, 1], colors=['rosybrown']) 
        
         # Overlay coastal boundary on the second subplot
-        if coast_shapefile is not None:
-            coast_shapefile.boundary.plot(ax=ax2, linewidth=1, edgecolor='black')
+        if coast_shape is not None:
+            coast_shape.boundary.plot(ax=ax2, linewidth=1, edgecolor='black')
         
         # Set axis limits for the second subplot
         ax2.set_xlabel('')
@@ -1349,7 +1356,7 @@ def set_mask_area_values_to_False_based_on_an_index_object(mask_area, index_obje
     # polygon_boundaries = concave_hull(points_in_the_polygon)
     
     # Create a path object for the polygon
-    polygon_path = Path(polygon_boundaries, closed=True)
+    polygon_path = mPath(polygon_boundaries, closed=True)
     
     
     # # Plotting the points where the gradient was computed
@@ -1980,7 +1987,7 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
     polygon_boundaries = polygon_boundaries[ np.append(polygon.vertices, polygon.vertices[0]) ]
     
     # Create a polygon path object
-    polygon_path = Path(polygon_boundaries, closed=True)
+    polygon_path = mPath(polygon_boundaries, closed=True)
     
     # # Plot the final plume boundary
     # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
@@ -1999,12 +2006,12 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
 def main_process(file_name,
                  parameters,
                  bathy_data_aligned,
-                 coast_shapefile,
                  cloud_check_water_mask, 
                  land_mask,
                  inside_polygon_mask,
                  output_stem,
                  dynamic_thresh,
+                 coast_shape=None,
                  variable_name=None):
     """
     Process a single satellite data file for plume detection.
@@ -2022,7 +2029,7 @@ def main_process(file_name,
         Configuration parameters for plume detection.
     bathymetry_data_aligned_to_reduced_map : xr.DataArray
         Bathymetric data aligned to the reduced resolution.
-    coast_shapefile : gpd.GeoDataFrame
+    coast_shapefolder : gpd.GeoDataFrame
         Shapefile of coastline for plotting.
     cloud_check_water_mask : xr.DataArray
         Water mask used for cloud coverage checks on the input grid.
@@ -2064,12 +2071,13 @@ def main_process(file_name,
     # If the percentage of cloud coverage exceeds the specified threshold, return default values without processing the plume area
     if (Check_if_the_area_is_too_cloudy(ds, cloud_check_water_mask, parameters)):
         # Plot the map with no plume area (due to clouds)
-        make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefile,
+        make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       parameters['lon_range_of_the_map_to_plot'],
                       parameters['lat_range_of_the_map_to_plot'],
                       parameters['bathymetric_threshold'],
                       bathy_data_aligned,
                       thresholds,
+                      coast_shape=coast_shape,
                       plot_the_plume_area=False)
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
@@ -2098,12 +2106,13 @@ def main_process(file_name,
 
     # If no valid plume area is detected, plot and return default values
     if (len(all_mask_area) == 0) or (any([x.values.any() for x in all_mask_area]) == False):
-        make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefile,
+        make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       lon_range_of_the_map_to_plot=parameters['lon_range_of_the_map_to_plot'],
                       lat_range_of_the_map_to_plot=parameters['lat_range_of_the_map_to_plot'],
                       bathymetric_threshold=parameters['bathymetric_threshold'],
                       bathymetry_data_aligned_to_reduced_map=bathy_data_aligned,
                       thresholds=thresholds,
+                      coast_shape=coast_shape,
                       plot_the_plume_area=False)
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
@@ -2128,7 +2137,7 @@ def main_process(file_name,
     data_to_return = return_stats_dictionnary(final_mask_area, ds_reduced, ds, parameters, thresholds)
 
     # Plot the final map with the plume area
-    make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced, coast_shapefile,
+    make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                   lon_range_of_the_map_to_plot=parameters['lon_range_of_the_map_to_plot'],
                   lat_range_of_the_map_to_plot=parameters['lat_range_of_the_map_to_plot'],
                   bathymetric_threshold=parameters['bathymetric_threshold'],
@@ -2138,6 +2147,7 @@ def main_process(file_name,
                   mask_area=final_mask_area,
                   close_river_mouth_area=final_close_river_mouth_area,
                   pixel_done=None,
+                  coast_shape=coast_shape,
                   show_bathymetric_mask=True)
 
     # Cleanup to free memory
@@ -2712,7 +2722,7 @@ def apply_plume_mask(file_names,
                      # regional_map_dir, 
                      plume_dir,
                      bathy = None,
-                     coast_shape = None):
+                     coast_shapefile_path = None):
       
     """
     Apply plume detection and analysis to satellite data.
@@ -2792,8 +2802,11 @@ def apply_plume_mask(file_names,
     # coast_shape = None
 
     # TODO: Get this working based on the given shapefile
-    # coast_shape = load_shapefile_data()
-    # coast_shape = load_shapefile_data(coast_shape)
+    if coast_shapefile_path is None :
+        # coast_shape = load_shapefile_data()
+        # coast_shape = load_shapefile_data(coast_shape)
+        coast_shape = gpd.read_file(coast_shapefile_path)
+        # coast_shape = gpd.read_file("/home/calanus/panache/testing/FRANCE_shapefile/gadm41_FRA_0.shp")
 
     # cases_to_process = pd.DataFrame({'Zone': [zone] * len(input_files),
     #                                 'Date': [os.path.basename(file).split('-')[0] for file in input_files],
@@ -2869,14 +2882,15 @@ def apply_plume_mask(file_names,
     # Process each file in parallel
     with multiprocess.Pool(nb_cores) as pool:
 
+        # TODO: Check that this matches to changes upstream in argument ordering
         results = pool.starmap(main_process,
                                 [(file_name,
                                 parameters,
                                 bathy_data_aligned,
-                                None, # france_shapefile,
                                 cloud_check_water_mask,
                                 land_mask,
                                 inside_polygon_mask,
+                                coast_shape,
                                 plume_dir / "MAPS" / file_name,
                                 dynamic_thresh) for file_name in file_names])
     # results = []
