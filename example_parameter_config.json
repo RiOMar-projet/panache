@@ -1,0 +1,81 @@
+{
+  "parameters": {
+    "lon_new_resolution": 0.015,
+    "lat_new_resolution": 0.015,
+    "searching_strategies": {
+      "Grand Rhone": {
+        "grid": [
+          [false, false, false, false, false, false, false],
+          [false, false, false, false, false, false, false],
+          [false, false, false, true, false, false, false],
+          [true, true, true, true, true, true, true],
+          [false, false, false, false, false, false, false]
+        ],
+        "coordinates_of_center": [2, 3]
+      },
+      "Petit Rhone": {
+        "grid": [
+          [false, false, false, false, false],
+          [false, false, false, false, false],
+          [false, false, true, false, false],
+          [true, true, true, true, true],
+          [false, false, false, false, false]
+        ],
+        "coordinates_of_center": [2, 2]
+      }
+    },
+    "bathymetric_threshold": 25,
+    "starting_points": {
+      "Grand Rhone": [43.41, 4.83],
+      "Petit Rhone": [43.47, 4.39]
+    },
+    "core_of_the_plumes": {
+      "Grand Rhone": [43.32, 4.85],
+      "Petit Rhone": [43.43, 4.39]
+    },
+    "lat_range_of_the_area_to_check_for_clouds": [43, 43.4],
+    "lon_range_of_the_area_to_check_for_clouds": [4.5, 5],
+    "threshold_of_cloud_coverage_in_percentage": 25,
+    "lat_range_of_the_map_to_plot": [42.25, 44],
+    "lon_range_of_the_map_to_plot": [3, 6],
+    "lat_range_to_search_plume_area": [41, 44],
+    "lon_range_to_search_plume_area": [3, 6],
+    "maximal_bathymetric_for_zone_with_resuspension": {
+      "Grand Rhone": 30,
+      "Petit Rhone": 30
+    },
+    "minimal_distance_from_estuary_for_zone_with_resuspension": {
+      "Grand Rhone": 30,
+      "Petit Rhone": 30
+    },
+    "max_steps_for_the_directions": {
+      "Grand Rhone": 35,
+      "Petit Rhone": 35
+    },
+    "maximal_threshold": {
+      "Grand Rhone": 3,
+      "Petit Rhone": 3
+    },
+    "minimal_threshold": {
+      "Grand Rhone": 0.75,
+      "Petit Rhone": 1
+    },
+    "quantile_to_use": {
+      "Grand Rhone": 0.2,
+      "Petit Rhone": 0.2
+    },
+    "fixed_threshold": {
+      "Grand Rhone": 1.2,
+      "Petit Rhone": 1.9
+    },
+    "river_mouth_to_exclude": {}
+  },
+  "input_glob": "/absolute/path/to/data/SEXTANT/SPM/*.nc",
+  "input_root": "/absolute/path/to/data/SEXTANT/SPM",
+  "bathymetry_path": "/absolute/path/to/Bathy_data.pkl",
+  "output_dir": "/absolute/path/to/plume_output",
+  "nb_cores": 4,
+  "dynamic_threshold": false,
+  "variable_name": "analysed_spim",
+  "coast_shapefile": "/absolute/path/to/gadm41_FRA_0.shp"
+}

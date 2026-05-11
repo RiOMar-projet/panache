@@ -4,8 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panache"
-version = "0.1.0"
+version = "0.1.1"
 description = "River plume detection on gridded data"
+authors = [
+  {name = "Louis Terrats"},
+  {name = "Robert W. Schlegel"},
+]
 requires-python = ">=3.10"
 dependencies = [
   "concave-hull",
