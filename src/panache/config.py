@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+from .utils import coordinates_of_pixels_to_inspect, define_parameters
+
+
+REQUIRED_PARAMETER_KEYS = {
+    "lon_new_resolution",
+    "lat_new_resolution",
+    "searching_strategies",
+    "bathymetric_threshold",
+    "starting_points",
+    "core_of_the_plumes",
+    "lat_range_of_the_area_to_check_for_clouds",
+    "lon_range_of_the_area_to_check_for_clouds",
+    "threshold_of_cloud_coverage_in_percentage",
+    "lat_range_of_the_map_to_plot",
+    "lon_range_of_the_map_to_plot",
+    "lat_range_to_search_plume_area",
+    "lon_range_to_search_plume_area",
+    "maximal_bathymetric_for_zone_with_resuspension",
+    "minimal_distance_from_estuary_for_zone_with_resuspension",
+    "max_steps_for_the_directions",
+    "maximal_threshold",
+    "minimal_threshold",
+    "quantile_to_use",
+    "fixed_threshold",
+    "river_mouth_to_exclude",
+}
+
+
+@dataclass
+class RunConfig:
+    input_glob: str
+    bathymetry_path: Path
+    output_dir: Path
+    nb_cores: int = 1
+    dynamic_threshold: bool = False
+    annual_map_path: Path | None = None
+    coast_shapefile: Path | None = None
+    input_root: Path | None = None
+    variable_name: str | None = None
+    zone: str | None = None
+    parameters: dict | None = None
+
+
+def _normalize_searching_strategies(searching_strategies: dict) -> dict:
+    normalized = {}
+    for plume_name, strategy in searching_strategies.items():
+        normalized[plume_name] = {
+            "grid": np.array(strategy["grid"], dtype=bool),
+            "coordinates_of_center": tuple(strategy["coordinates_of_center"]),
+        }
+    return normalized
+
+
+def _normalize_coordinate_map(values: dict) -> dict:
+    return {key: tuple(value) for key, value in values.items()}
+
+
+def build_parameters(raw_parameters: dict) -> dict:
+    missing = REQUIRED_PARAMETER_KEYS - set(raw_parameters)
+    if missing:
+        missing_list = ", ".join(sorted(missing))
+        raise ValueError(f"Missing required parameter keys: {missing_list}")
+
+    parameters = dict(raw_parameters)
+    parameters["searching_strategies"] = _normalize_searching_strategies(parameters["searching_strategies"])
+    parameters["starting_points"] = _normalize_coordinate_map(parameters["starting_points"])
+    parameters["core_of_the_plumes"] = _normalize_coordinate_map(parameters["core_of_the_plumes"])
+    parameters["river_mouth_to_exclude"] = _normalize_coordinate_map(parameters["river_mouth_to_exclude"])
+    parameters["searching_strategy_directions"] = coordinates_of_pixels_to_inspect(parameters["searching_strategies"])
+    return parameters
+
+
+def load_run_config(config_path: str | Path) -> RunConfig:
+    config_path = Path(config_path)
+    data = json.loads(config_path.read_text())
+
+    zone = data.get("zone")
+    raw_parameters = data.get("parameters")
+    if zone and raw_parameters:
+        raise ValueError("Use either 'zone' or 'parameters', not both.")
+    if not zone and not raw_parameters:
+        raise ValueError("A config must define either 'zone' or 'parameters'.")
+
+    parameters = define_parameters(zone) if zone else build_parameters(raw_parameters)
+    if parameters is None:
+        raise ValueError(f"Unknown zone preset: {zone}")
+
+    return RunConfig(
+        input_glob=data["input_glob"],
+        bathymetry_path=Path(data["bathymetry_path"]),
+        output_dir=Path(data["output_dir"]),
+        nb_cores=int(data.get("nb_cores", 1)),
+        dynamic_threshold=bool(data.get("dynamic_threshold", False)),
+        annual_map_path=Path(data["annual_map_path"]) if data.get("annual_map_path") else None,
+        coast_shapefile=Path(data["coast_shapefile"]) if data.get("coast_shapefile") else None,
+        input_root=Path(data["input_root"]) if data.get("input_root") else None,
+        variable_name=data.get("variable_name"),
+        zone=zone,
+        parameters=parameters,
+    )

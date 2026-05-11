@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panache"
+version = "0.1.0"
+description = "River plume detection on gridded data"
+requires-python = ">=3.10"
+dependencies = [
+  "concave-hull",
+  "geopandas",
+  "imageio",
+  "matplotlib",
+  "multiprocess",
+  "numpy",
+  "pandas",
+  "scikit-image",
+  "scipy",
+  "shapely",
+  "xarray",
+  "bathyreq",
+]
+
+[project.scripts]
+panache = "panache.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
