@@ -6,8 +6,19 @@
 #### Modules
 # =============================================================================
 
+from .utils import (
+    load_file,
+    load_bathymetric_data,
+    coordinates_of_pixels_to_inspect,
+    define_parameters,
+    align_bathymetry_to_resolution,
+)
+from .io import load_map_data
 
-import os, pickle, glob, imageio, re, gc, shutil, tempfile
+import os 
+import glob
+import imageio
+import gc
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -18,7 +29,7 @@ from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 from scipy.ndimage import label, binary_dilation, center_of_mass, distance_transform_edt
 from matplotlib.path import Path as mPath
-from matplotlib.patches import PathPatch
+# from matplotlib.patches import PathPatch
 from collections import deque
 from shapely.geometry import Polygon
 from shapely.vectorized import contains
@@ -31,15 +42,6 @@ except ImportError:  # Fall back to the stdlib module for simple batch runs.
     import multiprocessing as multiprocess
 
 multiprocess.set_start_method('spawn', force = True) # MacOS friendly multiprocessing
-
-from .utils import (
-    load_file,
-    load_bathymetric_data,
-    coordinates_of_pixels_to_inspect,
-    define_parameters,
-    align_bathymetry_to_resolution,
-)
-from .io import load_map_data
 
 
 # =============================================================================
