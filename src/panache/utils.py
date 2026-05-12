@@ -8,6 +8,7 @@
 
 
 import os
+import re
 import pickle
 import datetime
 from pathlib import Path
@@ -130,86 +131,7 @@ def align_bathymetry_to_resolution(dataset, path_to_bathy_data) :
     return bathymetry_data_aligned_to_reduced_map
 
 
-def degrees_to_km(lat_deg, lon_deg, latitude):
-    """
-    Convert distances in degrees to kilometers.
-    
-    Parameters:
-    - lat_deg: Distance in degrees of latitude
-    - lon_deg: Distance in degrees of longitude
-    - latitude: Latitude where the conversion is needed
-    
-    Returns:
-    - lat_km: Distance in kilometers for latitude
-    - lon_km: Distance in kilometers for longitude
-    """
-    # Conversion factor for latitude
-    lat_km = lat_deg * 111.32
-    
-    # Conversion factor for longitude, adjusted by latitude
-    lon_km = lon_deg * 111.32 * np.cos(np.radians(latitude))
-    
-    return lat_km, lon_km
-
-
-def km_to_degrees(lat_km, lon_km, latitude):
-    """
-    Convert a distance in meters to degrees of latitude and longitude.
-
-    Args:
-        meters (float): Distance in meters.
-        latitude (float): Latitude in degrees where the conversion is applied.
-
-    Returns:
-        (float, float): (Latitude degrees, Longitude degrees)
-    """
-    # 1 degree latitude ≈ 111.32 km (constant)
-    lat_deg = lat_km / 111.320  
-
-    # 1 degree longitude ≈ 111.32 * cos(latitude) km
-    lon_deg = lon_km / (111.320 * np.cos(np.radians(latitude)))
-
-    return lat_deg, lon_deg
-
-
-def get_empty_paths(dictionary, prefix=""):
-    
-    paths = []
-    
-    if isinstance(dictionary, dict) and len(dictionary) > 0:  # If it's a non-empty dictionary
-        for key, val in dictionary.items():
-            paths.extend(get_empty_paths(val, f"{prefix}/{key}"))  # Recursive call
-    elif len(dictionary) == 0:  # Exclude NaN values
-        paths.append(prefix)  # Add the path if it's a valid value
-        # paths.append( [f'{prefix}/{x}' for x in list(dictionary.keys())] )  # Add the path if it's a valid value
-    
-    return paths
-
-
-def get_non_empty_paths(dictionary, prefix=""):
-    
-    paths = []
-    
-    if isinstance(dictionary, dict) and len(dictionary) > 0 :  # If it's a non-empty dictionary
-        for key, val in dictionary.items():
-            paths.extend(get_non_empty_paths(val, prefix = f"{prefix}/{key}"))  # Recursive call
-
-    elif isinstance(dictionary, dict) == False:  # Exclude NaN values
-        paths.append(prefix)  # Add the path if it's a valid value
-    else :  # Exclude NaN values
-        for key, val in dictionary.items():
-            paths.append(f"{prefix}")  # Recursive call
-            break
-    
-    # paths = np.unique( [x.replace('Sat_values', '').replace('Time', '') for x in paths] )
-    
-    return paths
-
-
 def check_time_format(time_str):
-    
-    import re
-    import numpy as np
 
     # Regular expression pattern for HH:MM:SS format
     time_pattern = r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9] UTC$'

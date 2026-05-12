@@ -15,6 +15,8 @@ Give it NetCDF inputs, bathymetry, and a JSON run configuration; Panache finds p
 
 ## 📦 Installation
 
+NB: It is advised to install the module into a virtual environment rather into the base Python installation for your machine.
+
 ```bash
 git clone https://github.com/RiOMar-project/panache.git
 cd panache
@@ -28,7 +30,7 @@ pip install -e .
 Create a config file, then point the `panache` command at it:
 
 ```bash
-panache example_config.json
+panache example_zone_config.json
 ```
 
 The command prints the path to the generated `Results.csv` file when the run completes.

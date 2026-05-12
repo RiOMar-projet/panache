@@ -73,7 +73,7 @@ def normalize_map_data(data_array: xr.DataArray, source_path: str) -> xr.DataArr
     return data_array
 
 
-def load_map_data(path: str | Path, variable_name: str | None = None) -> xr.DataArray:
+def load_map_data(path: str | Path, lon_range: tuple[float, float], lat_range: tuple[float, float], variable_name: str | None = None, ) -> xr.DataArray:
     path = Path(path)
 
     if path.suffix == ".pkl":
@@ -91,6 +91,6 @@ def load_map_data(path: str | Path, variable_name: str | None = None) -> xr.Data
 
     with xr.open_dataset(path) as dataset:
         variable = infer_primary_variable(dataset, variable_name=variable_name)
-        data_array = dataset[variable].load()
+        data_array = dataset[variable].sel(lon=slice(lon_range[0], lon_range[1]), lat=slice(lat_range[0], lat_range[1])).load()
 
     return normalize_map_data(data_array, str(path))

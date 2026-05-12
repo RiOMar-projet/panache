@@ -41,10 +41,18 @@ def _load_boundary(boundary_path: Path | None):
     return gpd.read_file(boundary_path)
 
 
+def _run_task(task):
+    input_file = task[0]
+    result = main_process(*task)
+    return input_file, result
+
+
 def run_batch(config: RunConfig) -> Path:
-    input_files = sorted(Path(path) for path in glob.glob(config.input_glob, recursive=True))
+    input_files = sorted(Path(config.input_glob).rglob("*.nc"))
     if not input_files:
         raise FileNotFoundError(f"No input files matched: {config.input_glob}")
+
+    print(f"Found {len(input_files)} input files.")
 
     input_root = config.input_root or Path(os.path.commonpath([str(path) for path in input_files]))
     output_dir = config.output_dir
@@ -53,7 +61,11 @@ def run_batch(config: RunConfig) -> Path:
     coast_boundary = _load_boundary(config.coast_shapefile)
     parameters = config.parameters
 
-    ds = load_map_data(input_files[0], variable_name=config.variable_name)
+    ds = load_map_data(
+        input_files[0], 
+        lon_range=parameters['lon_range_to_search_plume_area'],
+        lat_range=parameters['lat_range_to_search_plume_area'],
+        variable_name=config.variable_name)
     ds_reduced = (
         reduce_resolution(ds, parameters["lat_new_resolution"], parameters["lon_new_resolution"])
         if parameters["lat_new_resolution"] is not None
@@ -69,27 +81,43 @@ def run_batch(config: RunConfig) -> Path:
         parameters,
     )
 
+    print("Project structure complete. Starting batch processing...")
+    print(f"Running batch with {config.nb_cores} cores...")
+
     tasks = [
         (
             str(input_file),
             parameters,
             bathymetry,
-            coast_boundary,
             cloud_check_water_mask,
             land_mask,
             inside_polygon_mask,
             str(_resolve_output_stem(input_file, output_dir, input_root)),
             config.dynamic_threshold,
+            coast_boundary,
             config.variable_name,
         )
         for input_file in input_files
     ]
 
     if config.nb_cores > 1:
+        results = []
+        total = len(tasks)
+
         with multiprocess.Pool(config.nb_cores) as pool:
-            results = pool.starmap(main_process, tasks)
+            for completed, (input_file, result) in enumerate(pool.imap_unordered(_run_task, tasks), 1):
+                print(f"[{completed}/{total}] Completed {Path(input_file).name}", flush=True)
+                results.append(result)
     else:
-        results = [main_process(*task) for task in tasks]
+        results = []
+        total = len(tasks)
+
+        for completed, task in enumerate(tasks, 1):
+            input_file, result = _run_task(task)
+            print(f"[{completed}/{total}] Completed {Path(input_file).name}", flush=True)
+            results.append(result)
+
+    print("Batch processing complete. Saving results...")
 
     statistics = pd.DataFrame([result for result in results if result is not None])
     if not statistics.empty:

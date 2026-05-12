@@ -2047,9 +2047,6 @@ def main_process(file_name,
     dict
         Processed results, including plume statistics and confidence index.
     """
-    # file_name = "/home/calanus/RiOMar/output/REGIONAL_MAPS/GULF_OF_LION/SEXTANT/SPM/merged/Standard/MAPS/WEEKLY/1998/Averaged_over_01_01.pkl"
-    # file_name = "/home/calanus/RiOMar/output/REGIONAL_MAPS/GULF_OF_LION/SEXTANT/SPM/merged/Standard/MAPS/WEEKLY/2013/Averaged_over_01_01.pkl"
-    # print(file_name)
 
     # Define path to save the figure generated during processing
     path_to_the_figure_file_to_save = output_stem
@@ -2058,7 +2055,10 @@ def main_process(file_name,
     os.makedirs(f'{os.path.dirname(path_to_the_figure_file_to_save)}', exist_ok=True)
 
     # Open and load the file (binary file assumed to contain data)
-    ds = load_map_data(file_name, variable_name=variable_name)
+    ds = load_map_data(file_name,
+                        lon_range=parameters['lon_range_to_search_plume_area'],
+                        lat_range=parameters['lat_range_to_search_plume_area'],
+                        variable_name=variable_name)
 
     # Reduce the resolution of the dataset to the specified latitude and longitude resolutions
     ds_reduced = (reduce_resolution(ds, parameters['lat_new_resolution'], parameters['lon_new_resolution'])
@@ -2162,6 +2162,7 @@ def main_process(file_name,
 # =============================================================================
 #### Classes 
 # =============================================================================
+
 
 class Create_the_plume_mask : 
     
@@ -2653,6 +2654,7 @@ class Create_the_plume_mask :
         # Log the operation in the protocol
         self.protocol.append(f'{len(self.protocol)} : remove_the_river_plume_from_the_mouth_of_the_neighboring_river')
 
+
 # =============================================================================
 #### Pipeline function
 # =============================================================================
@@ -2709,248 +2711,3 @@ def Pipeline_to_delineate_the_plume(ds_reduced,
     # the_plume.close_river_mouth_mask.plot()
     # the_plume.protocol
     return the_plume
-
-
-# =============================================================================
-#### Workflow functions
-# =============================================================================
-
-
-def apply_plume_mask(file_names, 
-                     zone,
-                     # time_step, 
-                     nb_cores, 
-                     dynamic_thresh, 
-                     # regional_map_dir, 
-                     plume_dir,
-                     bathy = None,
-                     coast_shapefile_path = None):
-      
-    """
-    Apply plume detection and analysis to satellite data.
-
-    This function processes satellite images to detect and analyze river plumes. It handles data loading,  
-    plume detection, statistical analysis, and visualization of results.
-
-    Parameters
-    ----------
-    file_names : dict
-       The list of files to process
-    zone : list of str
-        Name of geographic region for plume detection
-    nb_cores : int
-        Number of CPU cores to use for parallel processing
-    dynamic_thresh : bool
-        Whether to use dynamic threshold determination for plume detection
-    plume_dir : str
-        Directory where plume detection results will be saved
-    bathy : str
-        Path to the bathymetry data file. 
-        By default it will be retrieved from the directory based on the zone.
-        If it doesn't find it, it will create it from the GEBCO dataset.
-    # regional_map_dir : str
-    #     Base directory containing the regional satellite maps
-    # time_step : str or list of str
-    #     Temporal resolution(s) of the data (e.g., 'DAILY', 'MONTHLY')
-
-    Returns
-    -------
-    None
-        Results are saved to disk as:
-        - CSV files containing plume statistics
-        - PNG images showing detected plumes
-        - Animated GIFs combining the detection results
-
-    Notes
-    -----
-    The function performs the following steps:
-    1. Loads and preprocesses satellite data
-    2. Aligns bathymetry data to the satellite resolution
-    3. Creates masks for land and search areas
-    4. Detects plumes using parallel processing
-    5. Saves results as statistics and visualizations
-
-    The results include:
-    - Plume area and statistics
-    - SPM concentration thresholds
-    - Confidence indices
-    - Visualization maps
-    """
-
-    # core_arguments.update(
-    #     {'Years': unique_years_between_two_dates(core_arguments['start_day'], core_arguments['end_day']),
-    #      'Zones': Zones,
-    #      'Satellite_variables': ['SPM'],
-    #      'Temporal_resolution': ([time_step]
-    #                              if isinstance(time_step, str)
-    #                              else time_step)})
-
-    # cases_to_process = get_all_cases_to_process_for_regional_maps_or_plumes_or_X11(core_arguments)
-
-    # Testing...
-    # file_names = [
-    #     Path.home() / "pCloudDrive/data/SEXTANT/SPM/merged/Standard/DAILY/1998/01/01/19980101-EUR-L4-SPIM-ATL-v01-fv01-OI.nc",
-    #     Path.home() / "pCloudDrive/data/SEXTANT/SPM/merged/Standard/DAILY/1998/01/02/19980102-EUR-L4-SPIM-ATL-v01-fv01-OI.nc",
-    #     Path.home() / "pCloudDrive/data/SEXTANT/SPM/merged/Standard/DAILY/1998/01/03/19980103-EUR-L4-SPIM-ATL-v01-fv01-OI.nc",
-    #     Path.home() / "pCloudDrive/data/SEXTANT/SPM/merged/Standard/DAILY/1998/01/04/19980104-EUR-L4-SPIM-ATL-v01-fv01-OI.nc",
-    #     Path.home() / "pCloudDrive/data/SEXTANT/SPM/merged/Standard/DAILY/1998/01/05/19980105-EUR-L4-SPIM-ATL-v01-fv01-OI.nc"
-    # ]
-    # zone = "GULF_OF_LION"
-    # nb_cores = 2
-    # dynamic_thresh = False
-    # plume_dir = Path.home() / "panache" / "test_multi_plume_output" / zone
-    # bathy = None
-    # bathy = plume_dir / "Bathy_data.pkl"
-    # coast_shape = None
-
-    # TODO: Get this working based on the given shapefile
-    if coast_shapefile_path is None :
-        # coast_shape = load_shapefile_data()
-        # coast_shape = load_shapefile_data(coast_shape)
-        coast_shape = gpd.read_file(coast_shapefile_path)
-        # coast_shape = gpd.read_file("/home/calanus/panache/testing/FRANCE_shapefile/gadm41_FRA_0.shp")
-
-    # cases_to_process = pd.DataFrame({'Zone': [zone] * len(input_files),
-    #                                 'Date': [os.path.basename(file).split('-')[0] for file in input_files],
-    #                                 'file_path': input_files})
-
-    # for i, info in cases_to_process.iterrows():
-
-        # info = cases_to_process.iloc[i]
-
-        # print(f'{i} over {cases_to_process.shape[0] - 1} ({info.Zone} / {info.Date}')
-
-    # Retrieve specific parameters based on the selected zone.
-    parameters = define_parameters(zone)
-
-        # Build the file pattern to locate the satellite data files.
-        # file_names_pattern = fill_the_sat_paths(info,
-        #                                         path_to_fill_to_where_to_save_satellite_files(
-        #                                             regional_map_dir + "/" + info.Zone).replace(
-        #                                             '[TIME_FREQUENCY]', ''),
-        #                                         local_path=True).replace('/*/*/*',
-        #                                                                  f'MAPS/{info.Temporal_resolution}/{info.Year}/*.pkl')
-
-        # Check if the directory for the year's data exists; if not, skip processing.
-        # if not os.path.exists(os.path.dirname(file_names_pattern)):
-        #     print(f"Missing satellite data here : {file_names_pattern}")
-        #     print("Skip to the next iterate")
-        #     continue
-
-        # Find all files matching the specified pattern.
-        # file_names = glob.glob(file_names_pattern)
-
-    # Open the first file to extract the dataset structure.
-    ds = load_map_data(file_names[0], variable_name="analysed_spim")
-
-    # Reduce the spatial resolution of the dataset to match the new resolution
-    ds_reduced = (reduce_resolution(ds, parameters['lat_new_resolution'], parameters['lon_new_resolution'])
-                    if parameters['lat_new_resolution'] is not None
-                    else ds)
-
-    # Align bathymetry data to the dataset resolution.
-    # bathymetry_data_aligned_to_reduced_map = align_bathymetry_to_resolution(ds_reduced,
-    #                                                                         f'{regional_map_dir}/{info.Zone}/Bathy_data.pkl')
-    
-    # If bathy = None, create the .pkl file and reassign the pathway here to avoid doing it for each file in the loop
-    # TODO : Fix this so it can generate new .pkl files correctly
-    if bathy is None :
-        bathy = plume_dir / "Bathy_data.pkl"
-        if not os.path.exists(bathy) :
-            load_bathymetric_data(bathy, 
-                parameters['lon_range_of_the_map_to_plot'][0],
-                parameters['lon_range_of_the_map_to_plot'][1],
-                parameters['lat_range_of_the_map_to_plot'][0],
-                parameters['lat_range_of_the_map_to_plot'][1])
-            bathy = plume_dir / "Bathy_data.pkl"
-
-    # Prep bathymetry data
-    bathy_data_aligned = align_bathymetry_to_resolution(ds_reduced, bathy)
-    input_bathymetry_map = align_bathymetry_to_resolution(ds, bathy)
-
-    # Create a mask that delineate the searching area.
-    inside_polygon_mask = create_polygon_mask(ds_reduced, parameters)
-    cloud_check_water_mask, land_mask = derive_masks_from_bathymetry(
-        input_bathymetry_map,
-        bathy_data_aligned,
-        parameters,
-    )
-
-    # Prep folder
-    # TODO: Figure out why this isn't saving figures in the right place and fix it
-    folder_name_maps = plume_dir / "MAPS"
-    os.makedirs(folder_name_maps, exist_ok=True)
-
-    # Process each file in parallel
-    with multiprocess.Pool(nb_cores) as pool:
-
-        # TODO: Check that this matches to changes upstream in argument ordering
-        results = pool.starmap(main_process,
-                                [(file_name,
-                                parameters,
-                                bathy_data_aligned,
-                                cloud_check_water_mask,
-                                land_mask,
-                                inside_polygon_mask,
-                                coast_shape,
-                                plume_dir / "MAPS" / file_name,
-                                dynamic_thresh) for file_name in file_names])
-    # results = []
-    # for file_name in file_names:
-    #     result = main_process(file_name,
-    #                     parameters,
-    #                     bathy_data_aligned,
-    #                     None, # france_shapefile,
-    #                     cloud_check_water_mask,
-    #                     land_mask,
-    #                     inside_polygon_mask,
-    #                     plume_dir / "MAPS" / file_name,
-    #                     dynamic_thresh)
-    #     results.append(result)
-
-    # Create a DataFrame from the results, sort by date, and save it to a CSV
-    statistics = pd.DataFrame([x for x in results if x is not None]).sort_values('date').reset_index(drop=True)
-    # folder_name = os.path.dirname(file_names[0]).replace(regional_map_dir,
-    #                                                         plume_dir).replace("MAPS", "PLUME_DETECTION")
-    folder_name_stats = plume_dir / "STATISTICS"
-    os.makedirs(folder_name_stats, exist_ok=True)
-    statistics.to_csv(f'{folder_name_stats}/Results.csv', index=False)
-
-    # Create a GIF from the saved maps by combining all PNG images
-    saved_maps = sorted(glob.glob(f'{plume_dir}/MAPS/*.png'))
-    with imageio.get_writer(f'{plume_dir}/GIF.gif', mode='I', fps=1) as writer:
-        for figure_file in saved_maps:
-            image = imageio.imread(figure_file)
-            writer.append_data(image)
-
-    del results, ds_reduced, bathy_data_aligned, input_bathymetry_map, inside_polygon_mask, cloud_check_water_mask, land_mask
-    gc.collect()
-
-    # For debugging
-    # for file_name in file_names[0:10] :
-    #     print(file_name)
-    #     main_process(file_name,
-    #           file_names_pattern,
-    #           parameters,
-    #           bathymetry_data_aligned_to_reduced_map,
-    #           france_shapefile,
-    #           map_wo_clouds,
-    #           land_mask,
-    #           inside_polygon_mask,
-    #           plume_dir,
-    #           regional_map_dir, 
-    #           dynamic_thresh)
-
-    # global_cases_to_process = cases_to_process.drop(['Year'], axis = 1).drop_duplicates().reset_index(drop = True)
-
-    # for i in range(global_cases_to_process.shape[0]) :
-
-    #     info = global_cases_to_process.iloc[i].copy()
-
-    #     plot_time_series_of_plume_areas(working_directory = working_directory,
-    #                                     Zone = info.Zone,
-    #                                     Data_source = info.Data_source,
-    #                                     Satellite_sensor = info.Satellite_sensor,
-    #                                     atmospheric_correction = info.atmospheric_correction,
-    #                                     Temporal_resolution = info.Temporal_resolution,
-    #                                     Years = np.arange(1998,2025))

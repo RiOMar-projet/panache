@@ -1,9 +1,9 @@
 {
   "zone": "GULF_OF_LION",
-  "input_glob": "/absolute/path/to/data/SEXTANT/SPM/*.nc",
-  "input_root": "/absolute/path/to/data/SEXTANT/SPM",
+  "input_glob": "/absolute/path/to/data/SEXTANT/SPM/",
+  "input_root": "/absolute/path/to/data/SEXTANT/SPM/",
   "bathymetry_path": "/absolute/path/to/Bathy_data.pkl",
-  "output_dir": "/absolute/path/to/plume_output",
+  "output_dir": "/absolute/path/to/output",
   "nb_cores": 4,
   "dynamic_threshold": false,
   "variable_name": "analysed_spim",
