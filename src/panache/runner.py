@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import glob
+# import glob
 import os
 from pathlib import Path
 
@@ -19,7 +19,7 @@ except ImportError:  # Fall back to the stdlib module for simple batch runs.
 
 from .config import RunConfig
 from .io import load_map_data
-from .utils import align_bathymetry_to_resolution
+from .utils import align_bathymetry_to_resolution, coordinate_range_bounds
 from .plume_algorithm import (
     create_polygon_mask,
     derive_masks_from_bathymetry,
@@ -63,8 +63,8 @@ def run_batch(config: RunConfig) -> Path:
 
     ds = load_map_data(
         input_files[0], 
-        lon_range=parameters['lon_range_to_search_plume_area'],
-        lat_range=parameters['lat_range_to_search_plume_area'],
+        lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
+        lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
         variable_name=config.variable_name)
     ds_reduced = (
         reduce_resolution(ds, parameters["lat_new_resolution"], parameters["lon_new_resolution"])

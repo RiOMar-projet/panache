@@ -28,19 +28,74 @@ try:
 except ImportError:  # Only needed when shapefile data is requested.
     gpd = None
 
-try:
-    from concave_hull import concave_hull
-except ImportError:  # Preserve the raw point ordering when the helper is unavailable.
-    def concave_hull(points):
-        return list(points)
-
 proj_dir = os.path.dirname( os.path.abspath('__file__') )
 
 
 # =============================================================================
 #### Utility functions
 # =============================================================================
+
+
+# Direction tuples are (lat_index_delta, lon_index_delta). Loaded maps are
+# sorted by increasing latitude and longitude, so positive deltas point north/east.
+SEARCHING_STRATEGY_PRESETS = {
+    "northward_fan": [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1)],
+    "southward_fan": [(0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1)],
+    "eastward_fan": [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)],
+    "westward_fan": [(1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0)],
+}
+
+
+def searching_strategy_directions_from_presets(searching_strategies):
     
+    """
+    Resolve named search strategy presets into relative pixel directions.
+
+    Parameters
+    ----------
+    searching_strategies : Mapping[str, str]
+        A mapping from plume name to one of the available preset names.
+
+    Returns
+    -------
+    dict
+        A dictionary where each plume name maps to the relative pixel directions
+        used by the plume algorithm.
+    """
+    
+    if not isinstance(searching_strategies, Mapping):
+        raise TypeError(
+            "searching_strategies must be a mapping from plume name to preset name."
+        )
+    
+    available_presets = ", ".join(sorted(SEARCHING_STRATEGY_PRESETS))
+    directions = {}
+    
+    for plume_name, preset_name in searching_strategies.items():
+        if not isinstance(preset_name, str):
+            raise TypeError(
+                f"Search strategy for {plume_name!r} must be one of: {available_presets}."
+            )
+        
+        if preset_name not in SEARCHING_STRATEGY_PRESETS:
+            raise ValueError(
+                f"Unknown search strategy preset {preset_name!r} for {plume_name!r}. "
+                f"Available presets: {available_presets}."
+            )
+        
+        directions[plume_name] = list(SEARCHING_STRATEGY_PRESETS[preset_name])
+    
+    return directions
+
+
+def coordinate_range_bounds(coordinate_range):
+    values = list(coordinate_range)
+    if len(values) < 2:
+        raise ValueError("Coordinate ranges must contain at least two values.")
+    if len(values) > 2:
+        return (min(values), max(values))
+    return tuple(values)
+
 
 def load_file(file_name):
     
@@ -228,23 +283,13 @@ def define_parameters(Zone) :
     if Zone == 'BAY_OF_SEINE' :        
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
-        searching_strategies = {'Seine' : {'grid' : np.array([    [False, False, False, False, False],
-                                                                  [False, True,  True,  True,  False],
-                                                                  [False, True,  True,  False,  False],
-                                                                  [False, True,  True,  False,  False],
-                                                                  [False, False, False, False, False],
-                                                                ]),
-                                      'coordinates_of_center' : (2,2)}}
+        searching_strategies = {'Seine': 'westward_fan'}
         bathymetric_threshold = 0
         starting_points = {'Seine' : (49.43, 0.145)}
         core_of_the_plumes = {'Seine' : (49.43, 0)}
-        lat_range_of_the_area_to_check_for_clouds = [49.25, 49.75]
-        lon_range_of_the_area_to_check_for_clouds = [-0.3, 0.3]
+        lat_range_of_plume_area = [49.25, 50.25]
+        lon_range_of_plume_area = [-1.5, 0.5]
         threshold_of_cloud_coverage_in_percentage = 25
-        lat_range_of_the_map_to_plot = [49, 50.5] # [49.20, 51.25]
-        lon_range_of_the_map_to_plot = [-1.5, 2] # [-1.5, 2.5]
-        lat_range_to_search_plume_area = [49.25, 50.25]
-        lon_range_to_search_plume_area = [-1.5, 0.5]
         maximal_bathymetric_for_zone_with_resuspension = {'Seine' : 30}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Seine' : 30}
         max_steps_for_the_directions = {'Seine' : 40}
@@ -257,28 +302,11 @@ def define_parameters(Zone) :
     elif Zone == 'BAY_OF_BISCAY' :        
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
-        searching_strategies = {'Gironde' : {'grid' : np.array([  [False, False, False, False, False],
-                                                                  [False, True,  True, True, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, True,  False,  False, False],
-                                                                  [False, False, False, False, False],
-                                                                ]),
-                                      'coordinates_of_center' : (2,2)},
-                              
-                                  'Charente' : {'grid' : np.array([ [False, False, False, False, False],
-                                                                    [False, True,  True, False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, False, False, False, False],
-                                                                  ]),
-                                                                'coordinates_of_center' : (2,2)},
-                                  'Sevre' : {'grid' : np.array([  [False, False, False, False, False],
-                                                                  [False, True,  True, False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, False, False, False, False],
-                                                                ]),
-                                                                'coordinates_of_center' : (2,2)}}
+        searching_strategies = {
+            'Gironde': 'westward_fan',
+            'Charente': 'westward_fan',
+            'Sevre': 'westward_fan',
+        }
         bathymetric_threshold = 0
         starting_points = {'Gironde' : (45.59, -1.05),
                           'Charente' : (45.96, -1.01),
@@ -287,13 +315,9 @@ def define_parameters(Zone) :
                               # 'Gironde' : (45.65, -1.33),
                               'Charente' : (45.98, -1.17),
                               'Sevre' : (46.24, -1.24)}
-        lat_range_of_the_area_to_check_for_clouds = [45.5, 46.35]
-        lon_range_of_the_area_to_check_for_clouds = [-1.8, -1.2]
+        lat_range_of_plume_area = [44.5, 46.5]
+        lon_range_of_plume_area = [-4, -0.5]
         threshold_of_cloud_coverage_in_percentage = 25
-        lat_range_of_the_map_to_plot = [45, 46.75] # [44.75, 46.75]
-        lon_range_of_the_map_to_plot = [-4, -0.5] # [-4.5, -1]
-        lat_range_to_search_plume_area = [44.5, 46.5]
-        lon_range_to_search_plume_area = [-4, -0.5]
         maximal_bathymetric_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Gironde' : 30, 'Charente' : 20, 'Sevre' : 20}
         max_steps_for_the_directions = {'Gironde' : 100, 'Charente' : 50, 'Sevre' : 50}
@@ -306,33 +330,18 @@ def define_parameters(Zone) :
     elif Zone == 'GULF_OF_LION' :        
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
-        searching_strategies = {'Grand Rhone' : {'grid' : np.array([  [False, False, False, False, False, False, False],
-                                                                      [False, False, False, False, False, False, False],
-                                                                      [False, False, False,  True, False, False, False],
-                                                                      [True,  True,  True,  True,  True, True, True],
-                                                                      [False, False, False, False, False, False, False],
-                                                                    ]),
-                                      'coordinates_of_center' : (2,3)},
-                                
-                                'Petit Rhone' : {'grid' : np.array([    [False, False, False, False, False],
-                                                                        [False, False, False, False, False],
-                                                                        [False, False, True,  False, False],
-                                                                        [True,  True,  True,  True,  True],
-                                                                        [False, False, False, False, False],
-                                                                      ]),
-                                            'coordinates_of_center' : (2,2)}}
+        searching_strategies = {
+            'Grand Rhone': 'southward_fan',
+            'Petit Rhone': 'southward_fan',
+        }
         bathymetric_threshold = 25
         starting_points = {'Grand Rhone' : (43.41, 4.83),
                            'Petit Rhone' : (43.47, 4.39)}
         core_of_the_plumes = {'Grand Rhone' : (43.32, 4.85),
                               'Petit Rhone' : (43.43, 4.39)}
-        lat_range_of_the_area_to_check_for_clouds = [43, 43.4]
-        lon_range_of_the_area_to_check_for_clouds = [4.5, 5]
+        lat_range_of_plume_area = [41, 44]
+        lon_range_of_plume_area = [3, 6]
         threshold_of_cloud_coverage_in_percentage = 25
-        lat_range_of_the_map_to_plot = [42.25, 44] # [42, 43.7]
-        lon_range_of_the_map_to_plot = [3, 6] # [2.75, 6.55]
-        lat_range_to_search_plume_area = [41, 44]
-        lon_range_to_search_plume_area = [3, 6]
         maximal_bathymetric_for_zone_with_resuspension = {'Grand Rhone' : 30, 'Petit Rhone' : 30}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Grand Rhone' : 30, 'Petit Rhone' : 30}
         max_steps_for_the_directions = {'Grand Rhone' : 35, 'Petit Rhone' : 35}
@@ -345,49 +354,14 @@ def define_parameters(Zone) :
     elif Zone == 'EASTERN_CHANNEL' :        
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
-        searching_strategies = {'Arques' : {'grid' : np.array([   [False, False, False, False, False],
-                                                                  [False, True,  True,  True, False],
-                                                                  [False, True,  True,  True, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, False, False, False, False],
-                                                                ]),
-                                      'coordinates_of_center' : (2,2)},
-                                'Bresle' : {'grid' : np.array([   [False, False, False, False, False],
-                                                                  [False, True,  True,  True, False],
-                                                                  [False, True,  True,  True, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, False, False, False, False],
-                                                                ]),
-                                      'coordinates_of_center' : (2,2)},
-                                'Somme' : {'grid' : np.array([    [False, False, False, False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, False, False, False, False],
-                                                                ]),
-                                      'coordinates_of_center' : (2,2)},
-                                'Authie' : {'grid' : np.array([     [False, False, False, False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, False, False, False, False],
-                                                                  ]),
-                                                              'coordinates_of_center' : (2,2)},
-                                'Canche' : {'grid' : np.array([     [False, False, False, False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, False, False, False, False],
-                                                                  ]),
-                                                              'coordinates_of_center' : (2,2)},
-                                'Liane' : {'grid' : np.array([      [False, False, False, False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, False, False, False, False],
-                                                                  ]),
-                                                              'coordinates_of_center' : (2,2)}}
-          
+        searching_strategies = {
+            'Arques': 'westward_fan',
+            'Bresle': 'westward_fan',
+            'Somme': 'westward_fan',
+            'Authie': 'westward_fan',
+            'Canche': 'westward_fan',
+            'Liane': 'westward_fan',
+        }
         bathymetric_threshold = 0
         starting_points = { 'Arques' : (49.94, 1.08),
                             'Bresle' : (50.06, 1.37),
@@ -401,45 +375,34 @@ def define_parameters(Zone) :
                               'Authie' : (50.38, 1.52),
                               'Canche' : (50.56, 1.54),
                               'Liane' : (50.75, 1.56)}
-        lat_range_of_the_area_to_check_for_clouds = [49.75, 50.85]
-        lon_range_of_the_area_to_check_for_clouds = [0.75, 1.75]
+        lat_range_of_plume_area = [49.75, 49.75, 51.15, 50.4]
+        lon_range_of_plume_area = [0.5, 1.75, 1.75, 0.5]
         threshold_of_cloud_coverage_in_percentage = 25
-        lat_range_of_the_map_to_plot = [49.20, 51.5]
-        lon_range_of_the_map_to_plot = [-1.5, 3]
-        lat_range_to_search_plume_area = [49.75, 49.75, 51.15, 50.4]
-        lon_range_to_search_plume_area = [0.5, 1.75, 1.75, 0.5]
         max_steps_for_the_directions = {'Arques' : None, 'Bresle' : None, 'Somme' : None,
                                         'Authie' : None, 'Canche' : None, 'Liane' : None}
+        maximal_bathymetric_for_zone_with_resuspension = {river: 30 for river in searching_strategies}
+        minimal_distance_from_estuary_for_zone_with_resuspension = {river: 30 for river in searching_strategies}
+        maximal_threshold = {river: 11 for river in searching_strategies}
+        minimal_threshold = {river: 7 for river in searching_strategies}
+        quantile_to_use = {river: 0.10 for river in searching_strategies}
+        fixed_threshold = {river: 9.5 for river in searching_strategies}
         river_mouth_to_exclude = {}
       
     elif Zone == 'SOUTHERN_BRITTANY':         
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
-        searching_strategies = {'Loire' : {'grid' : np.array([    [False, False, False, False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, True,  True,  False, False],
-                                                                  [False, True,  True,  True, False],
-                                                                  [False, False, False, False, False],
-                                                                ]), 'coordinates_of_center' : (2,2)},
-                                'Vilaine' : {'grid' : np.array([    [False, False, False, False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, True,  True,  False, False],
-                                                                    [False, False, False, False, False],
-                                                                  ]), 'coordinates_of_center' : (2,2)}
-                                                                  }
+        searching_strategies = {
+            'Loire': 'westward_fan',
+            'Vilaine': 'westward_fan',
+        }
         bathymetric_threshold = 0
         starting_points = {'Loire' : (47.29, -2.10),
                            'Vilaine' : (47.50, -2.46)}
         core_of_the_plumes = {'Loire' : (47.19, -2.36),
                               'Vilaine' : (47.47, -2.59)}
-        lat_range_of_the_area_to_check_for_clouds = [46.87, 47.55]
-        lon_range_of_the_area_to_check_for_clouds = [-3, -2.01]
+        lat_range_of_plume_area = [46.5, 48]
+        lon_range_of_plume_area = [-5, -1.5]
         threshold_of_cloud_coverage_in_percentage = 25
-        lat_range_of_the_map_to_plot = [46, 48] # [46, 48.5]
-        lon_range_of_the_map_to_plot = [-5, -1] # [-5, -1.5]
-        lat_range_to_search_plume_area = [46.5, 48]
-        lon_range_to_search_plume_area = [-5, -1.5]
         maximal_bathymetric_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         max_steps_for_the_directions = { 'Loire' : 100, 'Vilaine' : 50}
@@ -453,8 +416,7 @@ def define_parameters(Zone) :
         print(f"The zone {Zone} is not available. Please select one of the following zones : 'BAY_OF_SEINE', 'BAY_OF_BISCAY', 'GULF_OF_LION', 'EASTERN_CHANNEL', 'SOUTHERN_BRITTANY'.")
         return None
     
-    # TODO: Investigate why this is causing errors
-    searching_strategy_directions = coordinates_of_pixels_to_inspect(searching_strategies)
+    searching_strategy_directions = searching_strategy_directions_from_presets(searching_strategies)
     
     return {
         'lon_new_resolution' : lon_new_resolution, 
@@ -463,13 +425,9 @@ def define_parameters(Zone) :
         'bathymetric_threshold' : bathymetric_threshold, 
         'starting_points' : starting_points, 
         'core_of_the_plumes' : core_of_the_plumes,
-        'lat_range_of_the_area_to_check_for_clouds' : lat_range_of_the_area_to_check_for_clouds, 
-        'lon_range_of_the_area_to_check_for_clouds' : lon_range_of_the_area_to_check_for_clouds, 
+        'lat_range_of_plume_area' : lat_range_of_plume_area, 
+        'lon_range_of_plume_area' : lon_range_of_plume_area, 
         'threshold_of_cloud_coverage_in_percentage' : threshold_of_cloud_coverage_in_percentage,
-        'lat_range_of_the_map_to_plot' : lat_range_of_the_map_to_plot, 
-        'lon_range_of_the_map_to_plot' : lon_range_of_the_map_to_plot, 
-        'lat_range_to_search_plume_area' : lat_range_to_search_plume_area, 
-        'lon_range_to_search_plume_area' : lon_range_to_search_plume_area,
         'maximal_bathymetric_for_zone_with_resuspension' : maximal_bathymetric_for_zone_with_resuspension,
         'minimal_distance_from_estuary_for_zone_with_resuspension' : minimal_distance_from_estuary_for_zone_with_resuspension,
         'max_steps_for_the_directions' : max_steps_for_the_directions,
@@ -480,80 +438,3 @@ def define_parameters(Zone) :
         'river_mouth_to_exclude' : river_mouth_to_exclude,
         'searching_strategy_directions' : searching_strategy_directions
     }
-
-
-def coordinates_of_pixels_to_inspect(searching_strategies) : 
-     
-    """
-   Computes the relative distances from a center pixel to all "True" pixels 
-   in a given grid for each search strategy.
-
-   Parameters
-   ----------
-   searching_strategies : dict
-       A dictionary where each key corresponds to a search strategy. Each value 
-       is another dictionary with:
-           - 'grid' : 2D boolean numpy array
-               A boolean grid where "True" indicates pixels of interest.
-           - 'coordinates_of_center' : tuple of int
-               Coordinates (row, column) of the center pixel in the grid.
-
-   Returns
-   -------
-   to_return : dict
-       A dictionary where each key corresponds to a search strategy and each value 
-       is a list of tuples representing the relative distances of "True" pixels 
-       from the center pixel.
-   """
-
-    to_return = {} # Initialize an empty dictionary to store results
-       
-    # Iterate through each search strategy in the input dictionary
-    for index, searching_strategy in searching_strategies.items() : 
-    
-        # Initialize a list to store the distances (as tuples) for this strategy
-        distance_list = []
-        
-        # Extract the boolean grid (a 2D array) and center pixel coordinates
-        boolean_array = searching_strategy['grid']
-        coordinate_of_the_center = searching_strategy['coordinates_of_center']
-        
-        # Loop through each pixel in the grid
-        for i in range(boolean_array.shape[0]): # Iterate over rows
-        
-            for j in range(boolean_array.shape[1]):  # Iterate over columns
-            
-                # Check if the pixel is "True"
-                if boolean_array[i, j]:
-                    
-                    # Calculate the horizontal distance (x-axis) from the center
-                    distance_x = coordinate_of_the_center[0] - i
-                    
-                    # Calculate the vertical distance (y-axis) and invert sign for standard image coordinates
-                    # We multiply by -1 to account for typical image coordinate systems where y-coordinates increase downwards
-                    distance_y = (coordinate_of_the_center[1] - j) * -1
-                    
-                    # Append the distance (as a tuple) to the list
-                    distance_list.append((distance_x, distance_y))
-             
-        # Exclude the center pixel itself (distance of (0, 0))
-        distance_list = concave_hull( [x for x in distance_list if x != (0,0)] )
-        
-        # Ensure that distances are ordered sequentially (no large jumps)
-        distance_list_in_good_order = abs( np.array( np.diff( [ np.sum(x) for x in distance_list ] ) ) ) <= 1
-        
-        # If distances are not in a good order, reorder them
-        if any( distance_list_in_good_order == False ) : 
-            index_start_element = np.where( distance_list_in_good_order == False )[0] +1
-            # Reorder the distance list by concatenating segments
-            distance_list = [distance_list[index_start_element[0]], 
-                           distance_list[index_start_element[0]:],
-                           distance_list[:index_start_element[0]]]
-            distance_list = flatten_a_list(distance_list)  # Flatten the reordered list
-            distance_list = list(dict.fromkeys(distance_list))  # Remove duplicates while preserving order
-        
-        # Store the computed list of distances in the dictionary
-        to_return[f'{index}'] = distance_list
-           
-    # Return the dictionary containing the distances for all search strategies 
-    return to_return

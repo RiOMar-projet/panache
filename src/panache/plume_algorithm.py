@@ -7,24 +7,24 @@
 # =============================================================================
 
 from .utils import (
+    coordinate_range_bounds,
     load_file,
-    load_bathymetric_data,
-    coordinates_of_pixels_to_inspect,
-    define_parameters,
-    align_bathymetry_to_resolution,
+    # load_bathymetric_data,
+    # define_parameters,
+    # align_bathymetry_to_resolution,
 )
 from .io import load_map_data
 
 import os 
-import glob
-import imageio
+# import glob
+# import imageio
 import gc
 import xarray as xr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-import geopandas as gpd
+# import geopandas as gpd
 from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 from scipy.ndimage import label, binary_dilation, center_of_mass, distance_transform_edt
@@ -360,8 +360,8 @@ def find_high_value_pixels(data, center_lat, center_lon, radius_km, SPM_threshol
 def make_the_plot(path_to_the_figure_file_to_save, 
                   ds, 
                   ds_reduced, 
-                  lon_range_of_the_map_to_plot, 
-                  lat_range_of_the_map_to_plot, 
+                  lon_range_of_plume_area, 
+                  lat_range_of_plume_area, 
                   bathymetric_threshold, 
                   bathymetry_data_aligned_to_reduced_map, 
                   thresholds,
@@ -383,9 +383,9 @@ def make_the_plot(path_to_the_figure_file_to_save,
        Original dataset to be plotted on the first subplot.
    ds_reduced : xarray.DataArray
        Processed or reduced dataset used to determine color bar limits and optional masking.
-   lon_range_of_the_map_to_plot : tuple of float
+   lon_range_of_plume_area : tuple of float
        Longitude range (min, max) for both subplots.
-   lat_range_of_the_map_to_plot : tuple of float
+   lat_range_of_plume_area : tuple of float
        Latitude range (min, max) for both subplots.
    bathymetric_threshold : float
        Depth threshold (in meters) used to create a bathymetric mask.
@@ -462,6 +462,9 @@ def make_the_plot(path_to_the_figure_file_to_save,
         # max_color_bar = 1.5
         # min_color_bar = 0.6
 
+    lon_plot_bounds = coordinate_range_bounds(lon_range_of_plume_area)
+    lat_plot_bounds = coordinate_range_bounds(lat_range_of_plume_area)
+
     # Create a figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
@@ -475,8 +478,8 @@ def make_the_plot(path_to_the_figure_file_to_save,
     ax1.set_title('Original map')
     ax1.set_xlabel('')
     ax1.set_ylabel('')
-    ax1.set_xlim([lon_range_of_the_map_to_plot[0], lon_range_of_the_map_to_plot[1]])
-    ax1.set_ylim([lat_range_of_the_map_to_plot[0], lat_range_of_the_map_to_plot[1]])
+    ax1.set_xlim(lon_plot_bounds)
+    ax1.set_ylim(lat_plot_bounds)
     
     # Plot the reduced dataset and additional elements on the second subplot
     plt.subplot(1, 2, 2)
@@ -484,22 +487,22 @@ def make_the_plot(path_to_the_figure_file_to_save,
     if plot_the_plume_area : 
         
         # Save mask_area as a csv file
-        if mask_area is not None:
-            # Create directory if it doesn't exist
-            mask_dir = os.path.dirname(path_to_the_figure_file_to_save)
-            os.makedirs(mask_dir, exist_ok=True)
+        # if mask_area is not None:
+        #     # Create directory if it doesn't exist
+        #     mask_dir = os.path.dirname(path_to_the_figure_file_to_save)
+        #     os.makedirs(mask_dir, exist_ok=True)
             
-            # Convert mask to dataframe with lat/lon coordinates
-            mask_df = pd.DataFrame({
-                'lat': np.repeat(mask_area.lat.values, len(mask_area.lon)),
-                'lon': np.tile(mask_area.lon.values, len(mask_area.lat)), 
-                'mask': mask_area.values.flatten()
-            })
-            # mask_df = mask_df[mask_df.mask == True]
-            filtered_df = mask_df[mask_df['mask']]
+        #     # Convert mask to dataframe with lat/lon coordinates
+        #     mask_df = pd.DataFrame({
+        #         'lat': np.repeat(mask_area.lat.values, len(mask_area.lon)),
+        #         'lon': np.tile(mask_area.lon.values, len(mask_area.lat)), 
+        #         'mask': mask_area.values.flatten()
+        #     })
+        #     # mask_df = mask_df[mask_df.mask == True]
+        #     filtered_df = mask_df[mask_df['mask']]
 
-            # Save to .csv
-            filtered_df.to_csv(f'{path_to_the_figure_file_to_save}.csv', index=False)
+        #     # Save to .csv
+        #     filtered_df.to_csv(f'{path_to_the_figure_file_to_save}.csv', index=False)
 
         # Plot the reduced dataset with the same color bar limits
         ds.plot(vmin = min_color_bar, vmax = max_color_bar, norm=colors.LogNorm())
@@ -536,8 +539,8 @@ def make_the_plot(path_to_the_figure_file_to_save,
         # Set axis limits for the second subplot
         ax2.set_xlabel('')
         ax2.set_ylabel('')
-        ax2.set_xlim([lon_range_of_the_map_to_plot[0], lon_range_of_the_map_to_plot[1]])
-        ax2.set_ylim([lat_range_of_the_map_to_plot[0], lat_range_of_the_map_to_plot[1]])
+        ax2.set_xlim(lon_plot_bounds)
+        ax2.set_ylim(lat_plot_bounds)
         
         # Add a title summarizing the plume detection
         fig.suptitle(f'Plume detection ({os.path.basename(path_to_the_figure_file_to_save)})', fontsize = 20)
@@ -1675,7 +1678,7 @@ def return_stats_dictionnary(final_mask_area, spm_reduced_map, spm_map, paramete
     n_pixel_in_the_plume_area = np.sum(final_mask_area) # Number of pixels in the plume area
     
     # Calculate the area of one pixel in km²
-    area_of_one_pixel = (parameters['lon_new_resolution'] * 111.32 * np.cos(np.radians(np.mean(parameters['lat_range_of_the_map_to_plot'])))) * (parameters['lat_new_resolution'] * 111.32) # Area of one pixel in km²
+    area_of_one_pixel = (parameters['lon_new_resolution'] * 111.32 * np.cos(np.radians(np.mean(coordinate_range_bounds(parameters['lat_range_of_plume_area']))))) * (parameters['lat_new_resolution'] * 111.32) # Area of one pixel in km²
     area_of_the_plume_mask = np.sum(final_mask_area) * area_of_one_pixel # Total plume area in km²
     
     # Compute mean and standard deviation of SPM in the plume area
@@ -1740,12 +1743,12 @@ def create_polygon_mask(dataset, parameters) :
         Boolean mask where True represents areas inside the polygon.
     """
     
-    # If the searching zone of the plume area (lat_range_to_search_plume_area & lon_range_to_search_plume_area) has more than two coordinates, create a polygon mask
-    if len(parameters['lat_range_to_search_plume_area']) > 2 : 
+    # If the searching zone of the plume area (lat_range_of_plume_area & lon_range_of_plume_area) has more than two coordinates, create a polygon mask
+    if len(parameters['lat_range_of_plume_area']) > 2 : 
 
         # Create polygon coordinates from the lat/lon ranges provided
-        polygon_coordinates = [(lon, lat) for lat, lon in zip( [*parameters['lat_range_to_search_plume_area'], parameters['lat_range_to_search_plume_area'][0]],
-                                                               [*parameters['lon_range_to_search_plume_area'], parameters['lon_range_to_search_plume_area'][0]])]
+        polygon_coordinates = [(lon, lat) for lat, lon in zip( [*parameters['lat_range_of_plume_area'], parameters['lat_range_of_plume_area'][0]],
+                                                               [*parameters['lon_range_of_plume_area'], parameters['lon_range_of_plume_area'][0]])]
         
         # Create the polygon object
         polygon = Polygon(polygon_coordinates)
@@ -1757,11 +1760,13 @@ def create_polygon_mask(dataset, parameters) :
     else : 
         
          # If it's a simple range, create a rectangular mask based on the lat/lon boundaries
+         lat_bounds = coordinate_range_bounds(parameters['lat_range_of_plume_area'])
+         lon_bounds = coordinate_range_bounds(parameters['lon_range_of_plume_area'])
          inside_polygon_mask = xr.zeros_like(dataset).astype(bool)
-         inside_polygon_mask.values = ( (inside_polygon_mask.lat >= parameters['lat_range_to_search_plume_area'][0]) & 
-                                        (inside_polygon_mask.lat <= parameters['lat_range_to_search_plume_area'][1]) &
-                                        (inside_polygon_mask.lon >= parameters['lon_range_to_search_plume_area'][0]) & 
-                                        (inside_polygon_mask.lon <= parameters['lon_range_to_search_plume_area'][1]) ) 
+         inside_polygon_mask.values = ( (inside_polygon_mask.lat >= lat_bounds[0]) & 
+                                        (inside_polygon_mask.lat <= lat_bounds[1]) &
+                                        (inside_polygon_mask.lon >= lon_bounds[0]) & 
+                                        (inside_polygon_mask.lon <= lon_bounds[1]) ) 
          
     return inside_polygon_mask
 
@@ -1798,15 +1803,11 @@ def derive_masks_from_bathymetry(
     """ 
 
     water_mask = bathymetry_map.notnull() & (bathymetry_map < 0)
+    lat_bounds = coordinate_range_bounds(parameters['lat_range_of_plume_area'])
+    lon_bounds = coordinate_range_bounds(parameters['lon_range_of_plume_area'])
     cloud_check_water_mask = water_mask.sel(
-        lat=slice(
-            parameters['lat_range_of_the_area_to_check_for_clouds'][0],
-            parameters['lat_range_of_the_area_to_check_for_clouds'][1],
-        ),
-        lon=slice(
-            parameters['lon_range_of_the_area_to_check_for_clouds'][0],
-            parameters['lon_range_of_the_area_to_check_for_clouds'][1],
-        ),
+        lat=slice(lat_bounds[0], lat_bounds[1]),
+        lon=slice(lon_bounds[0], lon_bounds[1]),
     )
 
     reduced_water_mask = reduced_bathymetry_map.notnull() & (reduced_bathymetry_map < 0)
@@ -1832,9 +1833,9 @@ def Check_if_the_area_is_too_cloudy(dataset, cloud_check_water_mask, parameters)
         in the cloud-coverage calculation.
     parameters : dict
         Dictionary of parameters, including:
-        - 'lat_range_of_the_area_to_check_for_clouds': tuple of float
+        - 'lat_range_of_plume_area': tuple of float
             Latitude range of the sub-area to evaluate.
-        - 'lon_range_of_the_area_to_check_for_clouds': tuple of float
+        - 'lon_range_of_plume_area': tuple of float
             Longitude range of the sub-area to evaluate.
         - 'threshold_of_cloud_coverage_in_percentage': float
             Percentage threshold to determine if the area is too cloudy.
@@ -1846,10 +1847,12 @@ def Check_if_the_area_is_too_cloudy(dataset, cloud_check_water_mask, parameters)
     """    
 
     # Select the sub-area of the dataset for cloud cover evaluation based on latitude and longitude ranges.
-    sub_area_to_check_for_zeros = dataset.sel(lat=slice(parameters['lat_range_of_the_area_to_check_for_clouds'][0],
-                                                        parameters['lat_range_of_the_area_to_check_for_clouds'][1]), 
-                                              lon=slice(parameters['lon_range_of_the_area_to_check_for_clouds'][0], 
-                                                        parameters['lon_range_of_the_area_to_check_for_clouds'][1]))
+    lat_bounds = coordinate_range_bounds(parameters['lat_range_of_plume_area'])
+    lon_bounds = coordinate_range_bounds(parameters['lon_range_of_plume_area'])
+    sub_area_to_check_for_zeros = dataset.sel(
+        lat=slice(lat_bounds[0], lat_bounds[1]),
+        lon=slice(lon_bounds[0], lon_bounds[1]),
+    )
         
     water_pixels = cloud_check_water_mask.astype(bool)
     n_cloudy_pixels = (sub_area_to_check_for_zeros.isnull() & water_pixels).sum().item()
@@ -1915,18 +1918,17 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
     >>> plt.show()
     """
     
-    # Define directions for inspecting neighboring pixels
-    directions = coordinates_of_pixels_to_inspect( {"directions" : {'grid' : np.array([ [True,  True,  True],
-                                                                                        [True,  True,  True],
-                                                                                        [True,  True,  True],
-                                                                                      ]),
-                                                                    'coordinates_of_center' : (1,1)}} )
-    directions['directions'].append(directions['directions'][0]) # Ensure loop closure for directions
+    # Define a closed loop of directions for inspecting neighboring pixels.
+    directions = [
+        (1, -1), (1, 0), (1, 1), (0, 1),
+        (-1, 1), (-1, 0), (-1, -1), (0, -1),
+    ]
+    directions.append(directions[0])
 
     # Compute gradients and points along specified directions
     gradient_values, direction_points, absolute_values = compute_gradient_with_directions_vectorized(spm_map = spm_map, 
                                                                                    start_point = start_point, 
-                                                                                   directions = directions['directions'],
+                                                                                   directions = directions,
                                                                                    max_steps = max_steps, # Max steps for gradient expansion
                                                                                    lower_high_values_to = np.min( [SPM_threshold*5, maximal_threshold] ),
                                                                                    create_X_intermediates_between_each_direction = 2) # Number of intermediate directions
@@ -2056,8 +2058,8 @@ def main_process(file_name,
 
     # Open and load the file (binary file assumed to contain data)
     ds = load_map_data(file_name,
-                        lon_range=parameters['lon_range_to_search_plume_area'],
-                        lat_range=parameters['lat_range_to_search_plume_area'],
+                        lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
+                        lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
                         variable_name=variable_name)
 
     # Reduce the resolution of the dataset to the specified latitude and longitude resolutions
@@ -2074,8 +2076,8 @@ def main_process(file_name,
     if (Check_if_the_area_is_too_cloudy(ds, cloud_check_water_mask, parameters)):
         # Plot the map with no plume area (due to clouds)
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
-                      parameters['lon_range_of_the_map_to_plot'],
-                      parameters['lat_range_of_the_map_to_plot'],
+                      parameters['lon_range_of_plume_area'],
+                      parameters['lat_range_of_plume_area'],
                       parameters['bathymetric_threshold'],
                       bathy_data_aligned,
                       thresholds,
@@ -2109,8 +2111,8 @@ def main_process(file_name,
     # If no valid plume area is detected, plot and return default values
     if (len(all_mask_area) == 0) or (any([x.values.any() for x in all_mask_area]) == False):
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
-                      lon_range_of_the_map_to_plot=parameters['lon_range_of_the_map_to_plot'],
-                      lat_range_of_the_map_to_plot=parameters['lat_range_of_the_map_to_plot'],
+                      lon_range_of_plume_area=parameters['lon_range_of_plume_area'],
+                      lat_range_of_plume_area=parameters['lat_range_of_plume_area'],
                       bathymetric_threshold=parameters['bathymetric_threshold'],
                       bathymetry_data_aligned_to_reduced_map=bathy_data_aligned,
                       thresholds=thresholds,
@@ -2130,18 +2132,25 @@ def main_process(file_name,
     final_close_river_mouth_area = reduce(np.logical_or, all_river_mouth_to_remove)
 
     # Save the final_mask_area as a .csv file in output_stem directory
-    final_mask_area_df = final_mask_area.to_dataframe(name='plume_mask').reset_index()
-    final_mask_area_df = final_mask_area_df[final_mask_area_df['plume_mask']]
-    final_mask_area_df = final_mask_area_df.rename(columns={'date_for_plot': 'date'})
-    final_mask_area_df.to_csv(f'{os.path.splitext(output_stem)[0]}_final_mask_area.csv', index=False)
+    # final_mask_area_df = final_mask_area.to_dataframe(name='plume_mask').reset_index()
+    # final_mask_area_df = final_mask_area_df[final_mask_area_df['plume_mask']]
+    # final_mask_area_df = final_mask_area_df.rename(columns={'date_for_plot': 'date'})
+    # final_mask_area_df.to_csv(f'{os.path.splitext(output_stem)[0]}_plume_mask.csv', index=False)
+    value_col = ds_reduced.name or "spm"
+    masked = ds_reduced.where(final_mask_area)
+    masked_df = masked.to_dataframe(name=value_col).reset_index()
+    masked_df = masked_df[masked_df[value_col].notnull()]
+    masked_df = masked_df.rename(columns={'date_for_plot': 'date'})
+    masked_df = masked_df[['date', 'lon', 'lat', value_col]]
+    masked_df.to_csv(f'{os.path.splitext(output_stem)[0]}_plume_mask.csv', index=False)
 
     # Caluclate statistics
     data_to_return = return_stats_dictionnary(final_mask_area, ds_reduced, ds, parameters, thresholds)
 
     # Plot the final map with the plume area
     make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
-                  lon_range_of_the_map_to_plot=parameters['lon_range_of_the_map_to_plot'],
-                  lat_range_of_the_map_to_plot=parameters['lat_range_of_the_map_to_plot'],
+                  lon_range_of_plume_area=parameters['lon_range_of_plume_area'],
+                  lat_range_of_plume_area=parameters['lat_range_of_plume_area'],
                   bathymetric_threshold=parameters['bathymetric_threshold'],
                   bathymetry_data_aligned_to_reduced_map=bathy_data_aligned,
                   thresholds=thresholds,

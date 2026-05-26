@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
-from .utils import coordinates_of_pixels_to_inspect, define_parameters
+from .utils import define_parameters, searching_strategy_directions_from_presets
 
 
 REQUIRED_PARAMETER_KEYS = {
@@ -16,13 +15,9 @@ REQUIRED_PARAMETER_KEYS = {
     "bathymetric_threshold",
     "starting_points",
     "core_of_the_plumes",
-    "lat_range_of_the_area_to_check_for_clouds",
-    "lon_range_of_the_area_to_check_for_clouds",
+    "lat_range_of_plume_area",
+    "lon_range_of_plume_area",
     "threshold_of_cloud_coverage_in_percentage",
-    "lat_range_of_the_map_to_plot",
-    "lon_range_of_the_map_to_plot",
-    "lat_range_to_search_plume_area",
-    "lon_range_to_search_plume_area",
     "maximal_bathymetric_for_zone_with_resuspension",
     "minimal_distance_from_estuary_for_zone_with_resuspension",
     "max_steps_for_the_directions",
@@ -50,13 +45,11 @@ class RunConfig:
 
 
 def _normalize_searching_strategies(searching_strategies: dict) -> dict:
-    normalized = {}
-    for plume_name, strategy in searching_strategies.items():
-        normalized[plume_name] = {
-            "grid": np.array(strategy["grid"], dtype=bool),
-            "coordinates_of_center": tuple(strategy["coordinates_of_center"]),
-        }
-    return normalized
+    if not isinstance(searching_strategies, Mapping):
+        raise TypeError(
+            "searching_strategies must be a mapping from plume name to preset name."
+        )
+    return dict(searching_strategies)
 
 
 def _normalize_coordinate_map(values: dict) -> dict:
@@ -74,7 +67,9 @@ def build_parameters(raw_parameters: dict) -> dict:
     parameters["starting_points"] = _normalize_coordinate_map(parameters["starting_points"])
     parameters["core_of_the_plumes"] = _normalize_coordinate_map(parameters["core_of_the_plumes"])
     parameters["river_mouth_to_exclude"] = _normalize_coordinate_map(parameters["river_mouth_to_exclude"])
-    parameters["searching_strategy_directions"] = coordinates_of_pixels_to_inspect(parameters["searching_strategies"])
+    parameters["searching_strategy_directions"] = searching_strategy_directions_from_presets(
+        parameters["searching_strategies"]
+    )
     return parameters
 
 
