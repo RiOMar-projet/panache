@@ -13,7 +13,7 @@ from .utils import (
     # define_parameters,
     # align_bathymetry_to_resolution,
 )
-from .io import load_map_data
+from .io import NoValidMapDataError, load_map_data
 
 import os 
 # import glob
@@ -2056,11 +2056,15 @@ def main_process(file_name,
     # Ensure the directory for saving figures exists
     os.makedirs(f'{os.path.dirname(path_to_the_figure_file_to_save)}', exist_ok=True)
 
-    # Open and load the file (binary file assumed to contain data)
-    ds = load_map_data(file_name,
-                        lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
-                        lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
-                        variable_name=variable_name)
+    # Open and load the input map. Empty/all-NaN scenes are skipped by the batch.
+    try:
+        ds = load_map_data(file_name,
+                            lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
+                            lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
+                            variable_name=variable_name)
+    except NoValidMapDataError:
+        print(f"Skipping {os.path.basename(file_name)}: file contains no finite data values.", flush=True)
+        return None
 
     # Reduce the resolution of the dataset to the specified latitude and longitude resolutions
     ds_reduced = (reduce_resolution(ds, parameters['lat_new_resolution'], parameters['lon_new_resolution'])

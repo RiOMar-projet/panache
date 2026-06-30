@@ -5,6 +5,7 @@ from pathlib import Path
 
 import imageio.v2 as imageio
 import pandas as pd
+import xarray as xr
 
 try:
     import geopandas as gpd
@@ -17,7 +18,7 @@ except ImportError:  # Fall back to the stdlib module for simple batch runs.
     import multiprocessing as multiprocess
 
 from .config import RunConfig
-from .io import load_map_data
+from .io import NoValidMapDataError, load_map_data
 from .utils import align_bathymetry_to_resolution, coordinate_range_bounds
 from .plume_algorithm import (
     create_polygon_mask,
@@ -65,6 +66,36 @@ def _resolve_output_stem(input_file: Path, output_dir: Path, input_base: Path) -
     return output_dir / "MAPS" / relative.with_suffix("")
 
 
+
+
+def _skip_empty_file_message(input_file: str | Path) -> str:
+    return f"Skipping {Path(input_file).name}: file contains no finite data values."
+
+
+def _load_first_valid_map_data(
+    input_files: list[Path],
+    parameters: dict,
+    variable_name: str | None,
+) -> tuple[xr.DataArray, list[Path]]:
+    skipped_files = []
+    for input_file in input_files:
+        try:
+            dataset = load_map_data(
+                input_file,
+                lon_range=coordinate_range_bounds(parameters["lon_range_of_plume_area"]),
+                lat_range=coordinate_range_bounds(parameters["lat_range_of_plume_area"]),
+                variable_name=variable_name,
+            )
+        except NoValidMapDataError:
+            print(_skip_empty_file_message(input_file), flush=True)
+            skipped_files.append(input_file)
+            continue
+
+        valid_input_files = [path for path in input_files if path not in skipped_files]
+        return dataset, valid_input_files
+
+    raise NoValidMapDataError("No input files contained finite data values.")
+
 def _load_boundary(boundary_path: Path | None):
     if boundary_path is None:
         return None
@@ -92,11 +123,7 @@ def run_batch(config: RunConfig) -> Path:
     coast_boundary = _load_boundary(config.coast_shapefile)
     parameters = config.parameters
 
-    ds = load_map_data(
-        input_files[0], 
-        lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
-        lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
-        variable_name=config.variable_name)
+    ds, input_files = _load_first_valid_map_data(input_files, parameters, config.variable_name)
     ds_reduced = (
         reduce_resolution(ds, parameters["lat_new_resolution"], parameters["lon_new_resolution"])
         if parameters["lat_new_resolution"] is not None
@@ -137,7 +164,8 @@ def run_batch(config: RunConfig) -> Path:
 
         with multiprocess.Pool(config.nb_cores) as pool:
             for completed, (input_file, result) in enumerate(pool.imap_unordered(_run_task, tasks), 1):
-                print(f"[{completed}/{total}] Completed {Path(input_file).name}", flush=True)
+                status = "Skipped" if result is None else "Completed"
+                print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
                 results.append(result)
     else:
         results = []
@@ -145,7 +173,8 @@ def run_batch(config: RunConfig) -> Path:
 
         for completed, task in enumerate(tasks, 1):
             input_file, result = _run_task(task)
-            print(f"[{completed}/{total}] Completed {Path(input_file).name}", flush=True)
+            status = "Skipped" if result is None else "Completed"
+            print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
             results.append(result)
 
     print("Batch processing complete. Saving results...")

@@ -18,6 +18,10 @@ DEFAULT_VARIABLE_CANDIDATES = (
 )
 
 
+class NoValidMapDataError(ValueError):
+    """Raised when an input map contains no finite data values."""
+
+
 def infer_primary_variable(dataset: xr.Dataset, variable_name: str | None = None) -> str:
     if variable_name:
         if variable_name not in dataset.data_vars:
@@ -74,6 +78,12 @@ def normalize_map_data(data_array: xr.DataArray, source_path: str) -> xr.DataArr
     return data_array
 
 
+def ensure_valid_map_data(data_array: xr.DataArray, source_path: str | Path) -> xr.DataArray:
+    if data_array.size == 0 or not np.isfinite(data_array.values).any():
+        raise NoValidMapDataError(f"{source_path} contains no finite data values.")
+    return data_array
+
+
 def load_map_data(path: str | Path, lon_range: tuple[float, float], lat_range: tuple[float, float], variable_name: str | None = None, ) -> xr.DataArray:
     path = Path(path)
 
@@ -85,7 +95,7 @@ def load_map_data(path: str | Path, lon_range: tuple[float, float], lat_range: t
             data = data["Basin_map"]
         if "map_data" not in data:
             raise KeyError(f"Pickle file {path} does not contain a 'map_data' entry.")
-        return data["map_data"]
+        return ensure_valid_map_data(data["map_data"], path)
 
     if path.suffix not in {".nc", ".nc4", ".cdf"}:
         raise ValueError(f"Unsupported file type for {path}")
@@ -94,4 +104,4 @@ def load_map_data(path: str | Path, lon_range: tuple[float, float], lat_range: t
         variable = infer_primary_variable(dataset, variable_name=variable_name)
         data_array = dataset[variable].sel(lon=slice(lon_range[0], lon_range[1]), lat=slice(lat_range[0], lat_range[1])).load()
 
-    return normalize_map_data(data_array, str(path))
+    return ensure_valid_map_data(normalize_map_data(data_array, str(path)), path)
