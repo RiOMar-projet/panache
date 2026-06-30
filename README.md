@@ -58,6 +58,8 @@ The command prints the path to the generated `Results.csv` file when the run com
   "input_path": "/data/SEXTANT/SPM/*.nc",
   "bathymetry_path": "/data/bathymetry/Bathy_data.pkl",
   "output_dir": "/data/panache-output",
+  "overwrite": false,
+  "gif": false,
   "nb_cores": 4,
   "dynamic_threshold": false,
   "variable_name": "analysed_spim",
@@ -71,6 +73,8 @@ Minimal required fields are:
 - `input_path`
 - `bathymetry_path`
 - `output_dir`
+- `overwrite`
+- `gif`
 
 ## 🗂️ Outputs
 
@@ -81,8 +85,9 @@ panache-output/
 ├── Results.csv
 ├── GIF.gif
 └── MAPS/
-    ├── 19980101-EUR-L4-SPIM-ATL-v01-fv01-OI_plume_mask.png
-    └── 19980101-EUR-L4-SPIM-ATL-v01-fv01-OI_plume_mask.csv
+    ├── [base_file_name]_plume_mask.png
+    └── [base_file_name]_plume_mask.csv
+    └── [base_file_name]_statistics.csv
 ```
 
 | Output | Description |
@@ -90,7 +95,8 @@ panache-output/
 | `Results.csv` | Batch-level plume statistics sorted by date. |
 | `GIF.gif` | Animated preview assembled from generated plume maps. |
 | `MAPS/*.png` | One rendered plume map per processed input file. |
-| `MAPS/*.csv` | Per-scene plume mask data for detected plume outputs. |
+| `MAPS/*_statistics.csv` | Per-scene summary statistics used to rebuild `Results.csv`. |
+| `MAPS/*_plume_mask.csv` | Per-scene plume mask data for detected plume outputs. |
 
 ## ⚙️ Configuration Modes
 

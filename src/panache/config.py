@@ -34,6 +34,8 @@ class RunConfig:
     input_path: str
     bathymetry_path: Path
     output_dir: Path
+    overwrite: bool
+    gif: bool
     nb_cores: int = 1
     dynamic_threshold: bool = False
     annual_map_path: Path | None = None
@@ -41,6 +43,13 @@ class RunConfig:
     variable_name: str | None = None
     zone: str | None = None
     parameters: dict | None = None
+
+
+def _required_bool(data: dict, key: str) -> bool:
+    value = data[key]
+    if not isinstance(value, bool):
+        raise TypeError(f"'{key}' must be a JSON boolean: true or false.")
+    return value
 
 
 def _normalize_searching_strategies(searching_strategies: dict) -> dict:
@@ -91,6 +100,8 @@ def load_run_config(config_path: str | Path) -> RunConfig:
         input_path=data["input_path"],
         bathymetry_path=Path(data["bathymetry_path"]),
         output_dir=Path(data["output_dir"]),
+        overwrite=_required_bool(data, "overwrite"),
+        gif=_required_bool(data, "gif"),
         nb_cores=int(data.get("nb_cores", 1)),
         dynamic_threshold=bool(data.get("dynamic_threshold", False)),
         annual_map_path=Path(data["annual_map_path"]) if data.get("annual_map_path") else None,

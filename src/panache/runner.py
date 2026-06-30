@@ -66,6 +66,30 @@ def _resolve_output_stem(input_file: Path, output_dir: Path, input_base: Path) -
     return output_dir / "MAPS" / relative.with_suffix("")
 
 
+def _statistics_path(output_stem: Path) -> Path:
+    return Path(f"{output_stem}_statistics.csv")
+
+
+def _output_exists(output_stem: Path) -> bool:
+    return _statistics_path(output_stem).exists()
+
+
+def _load_statistics(output_dir: Path) -> pd.DataFrame:
+    statistics_files = sorted((output_dir / "MAPS").rglob("*_statistics.csv"))
+    if not statistics_files:
+        return pd.DataFrame()
+
+    statistics = pd.concat(
+        (pd.read_csv(statistics_file) for statistics_file in statistics_files),
+        ignore_index=True,
+    )
+    if "date" in statistics:
+        statistics = statistics.sort_values("date").reset_index(drop=True)
+    return statistics
+
+
+def _skip_existing_output_message(input_file: str | Path) -> str:
+    return f"Skipping {Path(input_file).name}: output already exists."
 
 
 def _skip_empty_file_message(input_file: str | Path) -> str:
@@ -95,6 +119,7 @@ def _load_first_valid_map_data(
         return dataset, valid_input_files
 
     raise NoValidMapDataError("No input files contained finite data values.")
+
 
 def _load_boundary(boundary_path: Path | None):
     if boundary_path is None:
@@ -142,53 +167,61 @@ def run_batch(config: RunConfig) -> Path:
     print("Project structure complete. Starting batch processing...")
     print(f"Running batch with {config.nb_cores} cores...")
 
-    tasks = [
-        (
-            str(input_file),
-            parameters,
-            bathymetry,
-            cloud_check_water_mask,
-            land_mask,
-            inside_polygon_mask,
-            str(_resolve_output_stem(input_file, output_dir, input_base)),
-            config.dynamic_threshold,
-            coast_boundary,
-            config.variable_name,
+    tasks = []
+    for input_file in input_files:
+        output_stem = _resolve_output_stem(input_file, output_dir, input_base)
+        if not config.overwrite and _output_exists(output_stem):
+            print(_skip_existing_output_message(input_file), flush=True)
+            continue
+
+        tasks.append(
+            (
+                str(input_file),
+                parameters,
+                bathymetry,
+                cloud_check_water_mask,
+                land_mask,
+                inside_polygon_mask,
+                str(output_stem),
+                config.dynamic_threshold,
+                coast_boundary,
+                config.variable_name,
+            )
         )
-        for input_file in input_files
-    ]
 
     if config.nb_cores > 1:
-        results = []
         total = len(tasks)
 
         with multiprocess.Pool(config.nb_cores) as pool:
             for completed, (input_file, result) in enumerate(pool.imap_unordered(_run_task, tasks), 1):
                 status = "Skipped" if result is None else "Completed"
                 print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
-                results.append(result)
     else:
-        results = []
         total = len(tasks)
 
         for completed, task in enumerate(tasks, 1):
             input_file, result = _run_task(task)
             status = "Skipped" if result is None else "Completed"
             print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
-            results.append(result)
 
     print("Batch processing complete. Saving results...")
 
-    statistics = pd.DataFrame([result for result in results if result is not None])
-    if not statistics.empty:
-        statistics = statistics.sort_values("date").reset_index(drop=True)
+    statistics = _load_statistics(output_dir)
     results_path = output_dir / "Results.csv"
     statistics.to_csv(results_path, index=False)
 
-    saved_maps = sorted((output_dir / "MAPS").rglob("*.png"))
-    if saved_maps:
-        with imageio.get_writer(output_dir / "GIF.gif", mode="I", fps=1) as writer:
-            for figure_file in saved_maps:
-                writer.append_data(imageio.imread(figure_file))
+    print(f"{results_path}")
 
-    return results_path
+    if config.gif:
+        saved_maps = sorted((output_dir / "MAPS").rglob("*.png"))
+        if saved_maps:
+
+            print("GIF processing started. Multiple years of data may take a long time to process.")
+
+            with imageio.get_writer(output_dir / "GIF.gif", mode="I", fps=1) as writer:
+                for figure_file in saved_maps:
+                    writer.append_data(imageio.imread(figure_file))
+
+            print("GIF processing complete.")
+
+    return "All processes complete."

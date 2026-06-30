@@ -49,6 +49,11 @@ multiprocess.set_start_method('spawn', force = True) # MacOS friendly multiproce
 # =============================================================================
 
 
+def write_stats_csv(output_stem, stats):
+    pd.DataFrame([stats]).to_csv(f'{output_stem}_statistics.csv', index=False)
+
+
+
 def reduce_resolution(ds, lat_bin_size_in_degree, lon_bin_size_in_degree):
         
     """
@@ -2090,6 +2095,7 @@ def main_process(file_name,
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
+        write_stats_csv(output_stem, data_to_return)
 
         return data_to_return
 
@@ -2125,6 +2131,7 @@ def main_process(file_name,
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
+        write_stats_csv(output_stem, data_to_return)
 
         del all_mask_area
         gc.collect()
@@ -2164,6 +2171,7 @@ def main_process(file_name,
                   pixel_done=None,
                   coast_shape=coast_shape,
                   show_bathymetric_mask=True)
+    write_stats_csv(output_stem, data_to_return)
 
     # Cleanup to free memory
     del final_mask_area, all_mask_area

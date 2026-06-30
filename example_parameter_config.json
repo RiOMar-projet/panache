@@ -51,6 +51,7 @@
   "input_path": "/absolute/path/to/data/SEXTANT/SPM/*.nc",
   "bathymetry_path": "/absolute/path/to/Bathy_data.pkl",
   "output_dir": "/absolute/path/to/plume_output",
+  "overwrite": false,
   "nb_cores": 4,
   "dynamic_threshold": false,
   "variable_name": "analysed_spim",
