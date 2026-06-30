@@ -324,7 +324,7 @@ def define_parameters(Zone) :
             'Grand Rhone': 'southward_fan',
             'Petit Rhone': 'southward_fan',
         }
-        bathymetric_threshold = 0
+        bathymetric_threshold = 20
         starting_points = {'Grand Rhone' : (43.41, 4.83),
                            'Petit Rhone' : (43.47, 4.39)}
         core_of_the_plumes = {'Grand Rhone' : (43.32, 4.85),

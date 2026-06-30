@@ -48,8 +48,7 @@
     },
     "river_mouth_to_exclude": {}
   },
-  "input_glob": "/absolute/path/to/data/SEXTANT/SPM/*.nc",
-  "input_root": "/absolute/path/to/data/SEXTANT/SPM",
+  "input_path": "/absolute/path/to/data/SEXTANT/SPM/*.nc",
   "bathymetry_path": "/absolute/path/to/Bathy_data.pkl",
   "output_dir": "/absolute/path/to/plume_output",
   "nb_cores": 4,

@@ -31,14 +31,13 @@ REQUIRED_PARAMETER_KEYS = {
 
 @dataclass
 class RunConfig:
-    input_glob: str
+    input_path: str
     bathymetry_path: Path
     output_dir: Path
     nb_cores: int = 1
     dynamic_threshold: bool = False
     annual_map_path: Path | None = None
     coast_shapefile: Path | None = None
-    input_root: Path | None = None
     variable_name: str | None = None
     zone: str | None = None
     parameters: dict | None = None
@@ -89,14 +88,13 @@ def load_run_config(config_path: str | Path) -> RunConfig:
         raise ValueError(f"Unknown zone preset: {zone}")
 
     return RunConfig(
-        input_glob=data["input_glob"],
+        input_path=data["input_path"],
         bathymetry_path=Path(data["bathymetry_path"]),
         output_dir=Path(data["output_dir"]),
         nb_cores=int(data.get("nb_cores", 1)),
         dynamic_threshold=bool(data.get("dynamic_threshold", False)),
         annual_map_path=Path(data["annual_map_path"]) if data.get("annual_map_path") else None,
         coast_shapefile=Path(data["coast_shapefile"]) if data.get("coast_shapefile") else None,
-        input_root=Path(data["input_root"]) if data.get("input_root") else None,
         variable_name=data.get("variable_name"),
         zone=zone,
         parameters=parameters,

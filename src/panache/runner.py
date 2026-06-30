@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-# import glob
-import os
+import glob
 from pathlib import Path
 
 import imageio.v2 as imageio
@@ -27,9 +26,42 @@ from .plume_algorithm import (
     reduce_resolution,
 )
 
+_GLOB_CHARS = frozenset("*?[")
 
-def _resolve_output_stem(input_file: Path, output_dir: Path, input_root: Path) -> Path:
-    relative = input_file.relative_to(input_root)
+
+def _has_glob_pattern(path: str) -> bool:
+    return any(char in path for char in _GLOB_CHARS)
+
+
+def _glob_root(pattern: str) -> Path:
+    parts = []
+    for part in Path(pattern).parts:
+        if _has_glob_pattern(part):
+            break
+        parts.append(part)
+    return Path(*parts) if parts else Path(".")
+
+
+def _discover_input_files(input_path: str) -> tuple[list[Path], Path]:
+    path = Path(input_path)
+
+    if _has_glob_pattern(input_path):
+        input_files = sorted(
+            Path(match)
+            for match in glob.glob(input_path, recursive=True)
+            if Path(match).is_file()
+        )
+        return input_files, _glob_root(input_path)
+
+    if path.is_file():
+        return [path], path.parent
+
+    input_files = sorted(path.rglob("*.nc"))
+    return input_files, path
+
+
+def _resolve_output_stem(input_file: Path, output_dir: Path, input_base: Path) -> Path:
+    relative = input_file.relative_to(input_base)
     return output_dir / "MAPS" / relative.with_suffix("")
 
 
@@ -48,13 +80,12 @@ def _run_task(task):
 
 
 def run_batch(config: RunConfig) -> Path:
-    input_files = sorted(Path(config.input_glob).rglob("*.nc"))
+    input_files, input_base = _discover_input_files(config.input_path)
     if not input_files:
-        raise FileNotFoundError(f"No input files matched: {config.input_glob}")
+        raise FileNotFoundError(f"No input files matched: {config.input_path}")
 
     print(f"Found {len(input_files)} input files.")
 
-    input_root = config.input_root or Path(os.path.commonpath([str(path) for path in input_files]))
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -92,7 +123,7 @@ def run_batch(config: RunConfig) -> Path:
             cloud_check_water_mask,
             land_mask,
             inside_polygon_mask,
-            str(_resolve_output_stem(input_file, output_dir, input_root)),
+            str(_resolve_output_stem(input_file, output_dir, input_base)),
             config.dynamic_threshold,
             coast_boundary,
             config.variable_name,

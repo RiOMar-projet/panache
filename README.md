@@ -55,8 +55,7 @@ The command prints the path to the generated `Results.csv` file when the run com
 ```json
 {
   "zone": "GULF_OF_LION",
-  "input_glob": "/data/SEXTANT/SPM/*.nc",
-  "input_root": "/data/SEXTANT/SPM",
+  "input_path": "/data/SEXTANT/SPM/*.nc",
   "bathymetry_path": "/data/bathymetry/Bathy_data.pkl",
   "output_dir": "/data/panache-output",
   "nb_cores": 4,
@@ -69,7 +68,7 @@ The command prints the path to the generated `Results.csv` file when the run com
 Minimal required fields are:
 
 - `zone` or `parameters`
-- `input_glob`
+- `input_path`
 - `bathymetry_path`
 - `output_dir`
 
