@@ -11,6 +11,7 @@ import xarray as xr
 
 DEFAULT_VARIABLE_CANDIDATES = (
     "analysed_spim",
+    "analysed_spm",
     "suspended_particulate_matter",
     "SPM",
     "spm",

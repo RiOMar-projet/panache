@@ -2,11 +2,6 @@
 # -*- coding: utf-8 -*-
 
 
-# =============================================================================
-#### Modules
-# =============================================================================
-
-
 import os
 import re
 import pickle
@@ -29,11 +24,6 @@ except ImportError:  # Only needed when shapefile data is requested.
     gpd = None
 
 proj_dir = os.path.dirname( os.path.abspath('__file__') )
-
-
-# =============================================================================
-#### Utility functions
-# =============================================================================
 
 
 # Direction tuples are (lat_index_delta, lon_index_delta). Loaded maps are
@@ -334,7 +324,7 @@ def define_parameters(Zone) :
             'Grand Rhone': 'southward_fan',
             'Petit Rhone': 'southward_fan',
         }
-        bathymetric_threshold = 25
+        bathymetric_threshold = 0
         starting_points = {'Grand Rhone' : (43.41, 4.83),
                            'Petit Rhone' : (43.47, 4.39)}
         core_of_the_plumes = {'Grand Rhone' : (43.32, 4.85),
@@ -348,44 +338,7 @@ def define_parameters(Zone) :
         maximal_threshold = {'Grand Rhone' : 3, 'Petit Rhone' : 3} # 3
         minimal_threshold = {'Grand Rhone' : 0.75, 'Petit Rhone' : 1} # 0.75
         quantile_to_use = {'Grand Rhone' : 0.2, 'Petit Rhone' : 0.2}
-        fixed_threshold = {'Grand Rhone' : 1.2, 'Petit Rhone' : 1.9} 
-        river_mouth_to_exclude = {}
-        
-    elif Zone == 'EASTERN_CHANNEL' :        
-        lon_new_resolution = 0.015
-        lat_new_resolution = 0.015
-        searching_strategies = {
-            'Arques': 'westward_fan',
-            'Bresle': 'westward_fan',
-            'Somme': 'westward_fan',
-            'Authie': 'westward_fan',
-            'Canche': 'westward_fan',
-            'Liane': 'westward_fan',
-        }
-        bathymetric_threshold = 0
-        starting_points = { 'Arques' : (49.94, 1.08),
-                            'Bresle' : (50.06, 1.37),
-                            'Somme' : (50.23, 1.58),
-                            'Authie' : (50.37, 1.58),
-                            'Canche' : (50.55, 1.60),
-                            'Liane' : (50.73, 1.59)}
-        core_of_the_plumes = {'Arques' : (49.95, 1.07),
-                              'Bresle' : (50.08, 1.37),
-                              'Somme' : (50.25, 1.45),
-                              'Authie' : (50.38, 1.52),
-                              'Canche' : (50.56, 1.54),
-                              'Liane' : (50.75, 1.56)}
-        lat_range_of_plume_area = [49.75, 49.75, 51.15, 50.4]
-        lon_range_of_plume_area = [0.5, 1.75, 1.75, 0.5]
-        threshold_of_cloud_coverage_in_percentage = 25
-        max_steps_for_the_directions = {'Arques' : None, 'Bresle' : None, 'Somme' : None,
-                                        'Authie' : None, 'Canche' : None, 'Liane' : None}
-        maximal_bathymetric_for_zone_with_resuspension = {river: 30 for river in searching_strategies}
-        minimal_distance_from_estuary_for_zone_with_resuspension = {river: 30 for river in searching_strategies}
-        maximal_threshold = {river: 11 for river in searching_strategies}
-        minimal_threshold = {river: 7 for river in searching_strategies}
-        quantile_to_use = {river: 0.10 for river in searching_strategies}
-        fixed_threshold = {river: 9.5 for river in searching_strategies}
+        fixed_threshold = {'Grand Rhone' : 2.1, 'Petit Rhone' : 2.1} 
         river_mouth_to_exclude = {}
       
     elif Zone == 'SOUTHERN_BRITTANY':         
@@ -405,7 +358,7 @@ def define_parameters(Zone) :
         threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
-        max_steps_for_the_directions = { 'Loire' : 100, 'Vilaine' : 50}
+        max_steps_for_the_directions = { 'Loire' : 200, 'Vilaine' : 50}
         maximal_threshold = { 'Loire' : 8, 'Vilaine' : 8} # 12
         minimal_threshold = { 'Loire' : 4, 'Vilaine' : 4} # 3
         quantile_to_use = { 'Loire' : 0.2, 'Vilaine' : 0.2}
