@@ -232,7 +232,7 @@ def flood_fill(data, start, SPM_threshold, directions):
                 
                 # Continue searching for finite values within the data array until at least 10 are found
                 # TODO: Look into what causes this to not find values and to return NaN
-                while (len(closest_finite_values) < 10) and (len(closest_coordinates) > 100) : #<400000000
+                while (len(closest_finite_values) < 10) and (len(closest_coordinates) < 100) : #<400000000
                     # print(len(closest_coordinates))
                     closest_coordinates = [ (lat_coord + d_lat, lon_coord + d_lon) for d_lat, d_lon in directions for lat_coord, lon_coord in closest_coordinates]
                     closest_finite_values = [ data[ coordinates ] for coordinates in closest_coordinates if np.isfinite( data[ coordinates ] ) ]
@@ -281,7 +281,7 @@ def flood_fill(data, start, SPM_threshold, directions):
                     mask[n_lat, lon_index_to_True] = True
 
     # Create a boolean array indicating the pixels that have been visited (done)
-    done_pixels = np.zeros(mask.shape, dtype=bool)  
+    done_pixels = np.zeros(mask.shape, dtype=bool)
     x_coords_of_done_pixels, y_coords_of_done_pixels = zip(*done)
     done_pixels[np.array(x_coords_of_done_pixels), np.array(y_coords_of_done_pixels)] = True
     
@@ -1866,17 +1866,20 @@ def Check_if_the_area_is_too_cloudy(dataset, cloud_check_water_mask, parameters)
     
     # Calculate the cloud coverage percentage and compare it to the threshold.
     # If the percentage of cloudy pixels exceeds the threshold, return True.
-    # if n_total_pixel == 0 :
-    #     test = True
-    # else :
-    #     test = (100 * n_cloudy_pixels / n_total_pixel) > parameters['threshold_of_cloud_coverage_in_percentage']
-    if n_total_pixel == 0:
-        return False
+    if n_total_pixel == 0 :
+        test = True
+    else :
+        test = (100 * n_cloudy_pixels / n_total_pixel) > parameters['threshold_of_cloud_coverage_in_percentage']
 
-    cloud_test = (100 * n_cloudy_pixels / n_total_pixel) > parameters['threshold_of_cloud_coverage_in_percentage']
+    return test
+
+    # if n_total_pixel == 0:
+    #     return False
+
+    # cloud_test = (100 * n_cloudy_pixels / n_total_pixel) > parameters['threshold_of_cloud_coverage_in_percentage']
     
     # Return the result indicating whether the area is too cloudy.
-    return cloud_test
+    # return cloud_test
 
 
 def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM_threshold, maximal_threshold, max_steps = 20) : 
@@ -2065,9 +2068,9 @@ def main_process(file_name,
     # Open and load the input map. Empty/all-NaN scenes are skipped by the batch.
     try:
         ds = load_map_data(file_name,
-                            lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
-                            lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
-                            variable_name=variable_name)
+                           lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
+                           lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
+                           variable_name=variable_name)
     except NoValidMapDataError:
         print(f"Skipping {os.path.basename(file_name)}: file contains no finite data values.", flush=True)
         return None
@@ -2084,7 +2087,9 @@ def main_process(file_name,
 
     # If the percentage of cloud coverage exceeds the specified threshold, return default values without processing the plume area
     if (Check_if_the_area_is_too_cloudy(ds, cloud_check_water_mask, parameters)):
+        
         # Plot the map with no plume area (due to clouds)
+        print(f"Skipping {os.path.basename(file_name)}: area is too cloudy.", flush=True)
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       parameters['lon_range_of_plume_area'],
                       parameters['lat_range_of_plume_area'],
@@ -2110,6 +2115,9 @@ def main_process(file_name,
                                                     plume_name,
                                                     inside_polygon_mask,
                                                     dynamic_thresh)
+        
+        # print(f"Processed plume: {the_plume.plume_name}")
+        # print(f"{len(the_plume.plume_mask.values[the_plume.plume_mask.values])} pixels detected in the plume area.", flush=True)
 
         if the_plume is None:
             continue
@@ -2121,6 +2129,7 @@ def main_process(file_name,
 
     # If no valid plume area is detected, plot and return default values
     if (len(all_mask_area) == 0) or (any([x.values.any() for x in all_mask_area]) == False):
+        print(f"Skipping {plume_name}: no plume area detected.", flush=True)
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       lon_range_of_plume_area=parameters['lon_range_of_plume_area'],
                       lat_range_of_plume_area=parameters['lat_range_of_plume_area'],
@@ -2141,7 +2150,7 @@ def main_process(file_name,
 
     # Combine all detected plume areas using logical OR
     final_mask_area = reduce(np.logical_or, all_mask_area)
-    final_close_river_mouth_area = reduce(np.logical_or, all_river_mouth_to_remove)
+    # final_close_river_mouth_area = reduce(np.logical_or, all_river_mouth_to_remove)
 
     # Save the final_mask_area as a .csv file in output_stem directory
     # final_mask_area_df = final_mask_area.to_dataframe(name='plume_mask').reset_index()
@@ -2168,7 +2177,7 @@ def main_process(file_name,
                   thresholds=thresholds,
                   plot_the_plume_area=True,
                   mask_area=final_mask_area,
-                  close_river_mouth_area=final_close_river_mouth_area,
+                  close_river_mouth_area=None, #final_close_river_mouth_area,
                   pixel_done=None,
                   coast_shape=coast_shape,
                   show_bathymetric_mask=True)
@@ -2318,7 +2327,7 @@ class Create_the_plume_mask :
         # directions = self.parameters['searching_strategy_directions'][self.plume_name]
         
         mask, pixel_done = flood_fill(data = self.spm_map.values, 
-                                      start = self.parameters['pixel_starting_points'][self.plume_name], 
+                                      start = self.parameters['pixel_starting_points'][self.plume_name],
                                       SPM_threshold = self.SPM_threshold,
                                       directions = self.parameters['searching_strategy_directions'][self.plume_name])  
         

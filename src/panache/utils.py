@@ -270,7 +270,7 @@ def define_parameters(Zone) :
         print("Zone must be a string.")
         return None
 
-    if Zone == 'BAY_OF_SEINE' :        
+    if Zone == 'BAY_OF_SEINE' :
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
         searching_strategies = {'Seine': 'westward_fan'}
@@ -289,7 +289,7 @@ def define_parameters(Zone) :
         fixed_threshold = {'Seine' : 9.5}
         river_mouth_to_exclude = {'Canal de Caen à la mer' : [49.296, -0.245]}
         
-    elif Zone == 'BAY_OF_BISCAY' :        
+    elif Zone == 'BAY_OF_BISCAY' :
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
         searching_strategies = {
@@ -299,10 +299,9 @@ def define_parameters(Zone) :
         }
         bathymetric_threshold = 0
         starting_points = {'Gironde' : (45.59, -1.05),
-                          'Charente' : (45.96, -1.01),
-                          'Sevre' : (46.30, -1.13)}
+                          'Charente' : (45.97, -1.11),
+                          'Sevre' : (46.27, -1.16)}
         core_of_the_plumes = {'Gironde' : (45.59, -1.05),
-                              # 'Gironde' : (45.65, -1.33),
                               'Charente' : (45.98, -1.17),
                               'Sevre' : (46.24, -1.24)}
         lat_range_of_plume_area = [44.5, 46.5]
@@ -317,7 +316,7 @@ def define_parameters(Zone) :
         fixed_threshold = {'Gironde' : 4.7, 'Charente' : 7.8, 'Sevre' : 5.2} 
         river_mouth_to_exclude = {}
     
-    elif Zone == 'GULF_OF_LION' :        
+    elif Zone == 'GULF_OF_LION' :
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
         searching_strategies = {
@@ -325,7 +324,7 @@ def define_parameters(Zone) :
             'Petit Rhone': 'southward_fan',
         }
         bathymetric_threshold = 20
-        starting_points = {'Grand Rhone' : (43.41, 4.83),
+        starting_points = {'Grand Rhone' : (43.30, 4.83),
                            'Petit Rhone' : (43.47, 4.39)}
         core_of_the_plumes = {'Grand Rhone' : (43.32, 4.85),
                               'Petit Rhone' : (43.43, 4.39)}
@@ -334,14 +333,14 @@ def define_parameters(Zone) :
         threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Grand Rhone' : 30, 'Petit Rhone' : 30}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Grand Rhone' : 30, 'Petit Rhone' : 30}
-        max_steps_for_the_directions = {'Grand Rhone' : 35, 'Petit Rhone' : 35}
+        max_steps_for_the_directions = {'Grand Rhone' : 50, 'Petit Rhone' : 35}
         maximal_threshold = {'Grand Rhone' : 3, 'Petit Rhone' : 3} # 3
         minimal_threshold = {'Grand Rhone' : 0.75, 'Petit Rhone' : 1} # 0.75
         quantile_to_use = {'Grand Rhone' : 0.2, 'Petit Rhone' : 0.2}
         fixed_threshold = {'Grand Rhone' : 2.1, 'Petit Rhone' : 2.1} 
         river_mouth_to_exclude = {}
       
-    elif Zone == 'SOUTHERN_BRITTANY':         
+    elif Zone == 'SOUTHERN_BRITTANY':
         lon_new_resolution = 0.015
         lat_new_resolution = 0.015
         searching_strategies = {
@@ -349,16 +348,16 @@ def define_parameters(Zone) :
             'Vilaine': 'westward_fan',
         }
         bathymetric_threshold = 0
-        starting_points = {'Loire' : (47.29, -2.10),
-                           'Vilaine' : (47.50, -2.46)}
+        starting_points = {'Loire' : (47.19, -2.20),
+                           'Vilaine' : (47.48, -2.56)}
         core_of_the_plumes = {'Loire' : (47.19, -2.36),
                               'Vilaine' : (47.47, -2.59)}
         lat_range_of_plume_area = [46.5, 48]
         lon_range_of_plume_area = [-5, -1.5]
-        threshold_of_cloud_coverage_in_percentage = 50 # To account for all land pixels in bbox
+        threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
-        max_steps_for_the_directions = { 'Loire' : 200, 'Vilaine' : 50}
+        max_steps_for_the_directions = { 'Loire' : 100, 'Vilaine' : 50}
         maximal_threshold = { 'Loire' : 8, 'Vilaine' : 8} # 12
         minimal_threshold = { 'Loire' : 4, 'Vilaine' : 4} # 3
         quantile_to_use = { 'Loire' : 0.2, 'Vilaine' : 0.2}
