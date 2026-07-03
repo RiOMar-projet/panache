@@ -4,6 +4,7 @@
   "bathymetry_path": "/absolute/path/to/Bathy_data.pkl",
   "output_dir": "/absolute/path/to/output",
   "overwrite": false,
+   "gif": true,
   "nb_cores": 4,
   "dynamic_threshold": false,
   "variable_name": "analysed_spim",

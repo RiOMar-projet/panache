@@ -8,23 +8,23 @@
     },
     "bathymetric_threshold": 25,
     "starting_points": {
-      "Var": [43.41, 4.83],
-      "Paillon": [43.47, 4.39]
+      "Var": [43.64, 7.18],
+      "Paillon": [43.69, 7.27]
     },
     "core_of_the_plumes": {
-      "Var": [43.32, 4.85],
-      "Paillon": [43.43, 4.39]
+      "Var": [43.60, 7.18],
+      "Paillon": [43.64, 7.26]
     },
-    "lat_range_of_plume_area": [41, 44],
-    "lon_range_of_plume_area": [3, 6],
+    "lat_range_of_plume_area": [43.5, 43.7],
+    "lon_range_of_plume_area": [7.1, 7.4],
     "threshold_of_cloud_coverage_in_percentage": 25,
     "maximal_bathymetric_for_zone_with_resuspension": {
-      "Var": 30,
-      "Paillon": 30
+      "Var": 20,
+      "Paillon": 10
     },
     "minimal_distance_from_estuary_for_zone_with_resuspension": {
-      "Var": 30,
-      "Paillon": 30
+      "Var": 10,
+      "Paillon": 10
     },
     "max_steps_for_the_directions": {
       "Var": 35,
@@ -43,7 +43,7 @@
       "Paillon": 0.2
     },
     "fixed_threshold": {
-      "Var": 1.2,
+      "Var": 1.9,
       "Paillon": 1.9
     },
     "river_mouth_to_exclude": {}
@@ -52,6 +52,7 @@
   "bathymetry_path": "/absolute/path/to/Bathy_data.pkl",
   "output_dir": "/absolute/path/to/plume_output",
   "overwrite": false,
+  "gif": true,
   "nb_cores": 4,
   "dynamic_threshold": false,
   "variable_name": "analysed_spim",

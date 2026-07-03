@@ -125,13 +125,15 @@ Search strategies are named presets rather than boolean pixel grids. Set each pl
 }
 ```
 
-Panache resolves those preset names into the pixel directions used internally by the plume algorithm.
+**`panache`** resolves those preset names into the pixel directions used internally by the plume algorithm.
+
+To see a full example of the rquired arguments, see the example JSON file [here](https://github.com/RiOMar-projet/panache/blob/main/example_parameter_config.json).
 
 Use `lat_range_of_plume_area` and `lon_range_of_plume_area` to define the plume domain used for input subsetting, cloud checks, map extents, and plume masking. Each can be a two-value min/max range, or matching polygon-coordinate lists for polygon plume domains.
 
 ## 🛰️ Input Expectations
 
 - NetCDF inputs should expose `lat` and `lon` coordinates
-- SEXTANT-style `analysed_spim` variables are detected automatically
+- Common variable names for SPM are detected automatically
 - If a file contains multiple plausible geophysical variables, set `variable_name`
 - `coast_shapefile` is optional and only serves to add coastal shapes to the maps and GIF
