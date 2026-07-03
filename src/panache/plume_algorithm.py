@@ -231,7 +231,8 @@ def flood_fill(data, start, SPM_threshold, directions):
                 closest_coordinates = coordinates_to_inspect
                 
                 # Continue searching for finite values within the data array until at least 10 are found
-                while (len(closest_finite_values) < 10) and (len(closest_coordinates) < 40000000) :
+                # TODO: Look into what causes this to not find values and to return NaN
+                while (len(closest_finite_values) < 10) and (len(closest_coordinates) > 100) : #<400000000
                     # print(len(closest_coordinates))
                     closest_coordinates = [ (lat_coord + d_lat, lon_coord + d_lon) for d_lat, d_lon in directions for lat_coord, lon_coord in closest_coordinates]
                     closest_finite_values = [ data[ coordinates ] for coordinates in closest_coordinates if np.isfinite( data[ coordinates ] ) ]
