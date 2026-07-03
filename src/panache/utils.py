@@ -355,7 +355,7 @@ def define_parameters(Zone) :
                               'Vilaine' : (47.47, -2.59)}
         lat_range_of_plume_area = [46.5, 48]
         lon_range_of_plume_area = [-5, -1.5]
-        threshold_of_cloud_coverage_in_percentage = 25
+        threshold_of_cloud_coverage_in_percentage = 50 # To account for all land pixels in bbox
         maximal_bathymetric_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         max_steps_for_the_directions = { 'Loire' : 200, 'Vilaine' : 50}
