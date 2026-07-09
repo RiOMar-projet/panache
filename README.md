@@ -2,6 +2,8 @@
 
 **`panache`** is a standalone Python module for detecting river plumes in gridded geophysical data.
 
+📚 Full documentation and API reference: https://RiOMar-projet.github.io/panache/
+
 As input it takes a list of NetCDF files, a bathymetry mask, and a JSON run configuration in order to create plume masks, illustrate per-timestep maps, write summary statistics, and build a quick animated overview of the processed run.
 
 ## ✨ Highlights

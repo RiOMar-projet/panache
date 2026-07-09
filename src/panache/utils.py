@@ -18,13 +18,6 @@ try:
 except ImportError:  # Only needed when bathymetry must be downloaded on the fly.
     bathyreq = None
 
-try:
-    import geopandas as gpd
-except ImportError:  # Only needed when shapefile data is requested.
-    gpd = None
-
-proj_dir = os.path.dirname( os.path.abspath('__file__') )
-
 
 # Direction tuples are (lat_index_delta, lon_index_delta). Loaded maps are
 # sorted by increasing latitude and longitude, so positive deltas point north/east.
@@ -135,8 +128,7 @@ def load_bathymetric_data(path_to_bathy_data, min_lon, max_lon, min_lat, max_lat
         with open(bathy_path, 'wb') as f:
             pickle.dump(bathymetric_data, f)
         
-        # bathymetric_data.plot()
-    else : 
+    else :
         
         # Load the pre-saved bathymetric data
         with open(path_to_bathy_data, 'rb') as f:
@@ -365,7 +357,7 @@ def define_parameters(Zone) :
         river_mouth_to_exclude = {}
 
     else :
-        print(f"The zone {Zone} is not available. Please select one of the following zones : 'BAY_OF_SEINE', 'BAY_OF_BISCAY', 'GULF_OF_LION', 'EASTERN_CHANNEL', 'SOUTHERN_BRITTANY'.")
+        print(f"The zone {Zone} is not available. Please select one of the following zones : 'BAY_OF_SEINE', 'BAY_OF_BISCAY', 'GULF_OF_LION', 'SOUTHERN_BRITTANY'.")
         return None
     
     searching_strategy_directions = searching_strategy_directions_from_presets(searching_strategies)

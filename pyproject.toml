@@ -25,6 +25,12 @@ dependencies = [
   "bathyreq",
 ]
 
+[project.optional-dependencies]
+docs = [
+  "sphinx",
+  "pydata-sphinx-theme",
+]
+
 [project.scripts]
 panache = "panache.cli:main"
 

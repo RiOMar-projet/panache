@@ -9,27 +9,20 @@
 from .utils import (
     coordinate_range_bounds,
     load_file,
-    # load_bathymetric_data,
-    # define_parameters,
-    # align_bathymetry_to_resolution,
 )
 from .io import NoValidMapDataError, load_map_data
 
-import os 
-# import glob
-# import imageio
+import os
 import gc
 import xarray as xr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-# import geopandas as gpd
 from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 from scipy.ndimage import label, binary_dilation, center_of_mass, distance_transform_edt
 from matplotlib.path import Path as mPath
-# from matplotlib.patches import PathPatch
 from collections import deque
 from shapely.geometry import Polygon
 from shapely.vectorized import contains
@@ -50,6 +43,25 @@ multiprocess.set_start_method('spawn', force = True) # MacOS friendly multiproce
 
 
 def write_stats_csv(output_stem, stats):
+
+    """
+    Write a single-row statistics dictionary to a CSV file.
+
+    Parameters
+    ----------
+    output_stem : str
+        Path prefix for the output file; the file is written to
+        ``f'{output_stem}_statistics.csv'``.
+    stats : dict
+        Dictionary of statistics for one processed file, as returned by
+        `return_stats_dictionnary`.
+
+    Returns
+    -------
+    None
+        The statistics are written to disk as a side effect.
+    """
+
     pd.DataFrame([stats]).to_csv(f'{output_stem}_statistics.csv', index=False)
 
 
@@ -233,7 +245,6 @@ def flood_fill(data, start, SPM_threshold, directions):
                 # Continue searching for finite values within the data array until at least 10 are found
                 # TODO: Look into what causes this to not find values and to return NaN
                 while (len(closest_finite_values) < 10) and (len(closest_coordinates) < 100) : #<400000000
-                    # print(len(closest_coordinates))
                     closest_coordinates = [ (lat_coord + d_lat, lon_coord + d_lon) for d_lat, d_lon in directions for lat_coord, lon_coord in closest_coordinates]
                     closest_finite_values = [ data[ coordinates ] for coordinates in closest_coordinates if np.isfinite( data[ coordinates ] ) ]
                     
@@ -452,21 +463,12 @@ def make_the_plot(path_to_the_figure_file_to_save,
     if mask_area is not None : 
         # Use the mask area to calculate the color bar range
         
-        # max_color_bar = np.max( [np.nanquantile(ds.values, 0.99), 1] )
         max_color_bar = np.nanmax( [np.nanquantile(ds_reduced.values[np.where(mask_area.values)], 0.85), 1] )
-        # max_color_bar = np.nanquantile(ds.values, 0.99)
         min_color_bar = np.nanmax( [np.nanmin(ds_reduced.values[np.where(mask_area.values)]), 0.1] )
-        
-    else : 
-        # Calculate the color bar range without a mask
 
+    else :
         max_color_bar = np.max( [np.nanquantile(ds.values, 0.95), 1] )
-        # max_color_bar = np.nanquantile(ds_reduced.values, 0.99)
-        # max_color_bar = np.nanquantile(ds.values, 0.99)
-        min_color_bar = np.max([np.nanmin(ds_reduced.values), 0.1]) 
-    
-        # max_color_bar = 1.5
-        # min_color_bar = 0.6
+        min_color_bar = np.max([np.nanmin(ds_reduced.values), 0.1])
 
     lon_plot_bounds = coordinate_range_bounds(lon_range_of_plume_area)
     lat_plot_bounds = coordinate_range_bounds(lat_range_of_plume_area)
@@ -490,27 +492,7 @@ def make_the_plot(path_to_the_figure_file_to_save,
     # Plot the reduced dataset and additional elements on the second subplot
     plt.subplot(1, 2, 2)
     
-    if plot_the_plume_area : 
-        
-        # Save mask_area as a csv file
-        # if mask_area is not None:
-        #     # Create directory if it doesn't exist
-        #     mask_dir = os.path.dirname(path_to_the_figure_file_to_save)
-        #     os.makedirs(mask_dir, exist_ok=True)
-            
-        #     # Convert mask to dataframe with lat/lon coordinates
-        #     mask_df = pd.DataFrame({
-        #         'lat': np.repeat(mask_area.lat.values, len(mask_area.lon)),
-        #         'lon': np.tile(mask_area.lon.values, len(mask_area.lat)), 
-        #         'mask': mask_area.values.flatten()
-        #     })
-        #     # mask_df = mask_df[mask_df.mask == True]
-        #     filtered_df = mask_df[mask_df['mask']]
-
-        #     # Save to .csv
-        #     filtered_df.to_csv(f'{path_to_the_figure_file_to_save}.csv', index=False)
-
-        # Plot the reduced dataset with the same color bar limits
+    if plot_the_plume_area :
         ds.plot(vmin = min_color_bar, vmax = max_color_bar, norm=colors.LogNorm())
        
         if show_bathymetric_mask : 
@@ -532,10 +514,8 @@ def make_the_plot(path_to_the_figure_file_to_save,
         # Overlay the plume mask on the plot
         ax2.contourf(mask_area.lon, mask_area.lat, mask_area.values, levels=[0.5, 1], colors=['red'])
        
-        if close_river_mouth_area is not None : 
-            # Overlay the mask of close river mouth 
-            # index_True_values = np.where(close_river_mouth_area.values)
-            ax2.contourf(close_river_mouth_area.lon, close_river_mouth_area.lat, close_river_mouth_area.values, 
+        if close_river_mouth_area is not None :
+            ax2.contourf(close_river_mouth_area.lon, close_river_mouth_area.lat, close_river_mouth_area.values,
                          levels=[0.5, 1], colors=['rosybrown']) 
        
         # Overlay coastal boundary on the second subplot
@@ -915,9 +895,7 @@ def compute_gradient_with_directions_vectorized(spm_map, start_point, directions
     
     # Normalize gradient values using a robust range
     relative_gradient_values = (gradient_values / (np.nanmax(spm_values) - np.nanmin(spm_values))
-                                # (gradient_values / (np.nanquantile(spm_values, 0.9) - np.nanquantile(spm_values, 0.1))
-                                # if (np.nanquantile(spm_values, 0.9) - np.nanquantile(spm_values, 0.1)) > 0 
-                                if (np.nanmax(spm_values) > np.nanmin(spm_values)) 
+                                if (np.nanmax(spm_values) > np.nanmin(spm_values))
                                 else None)
     
     # Create an array of gradient points, ignoring invalid coordinates
@@ -957,56 +935,25 @@ def filter_gradient_points_vectorized(gradient_values, gradient_points, absolute
             
     # Identify points that are far from land
     are_pixels_far_from_land = pixels_far_from_land(land_mask, pixel_positions = gradient_points, distance_threshold = 20)
-    
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
-    # for x, y in gradient_points[are_pixels_far_from_land].reshape(-1, gradient_points.shape[-1]) :
-    #     plt.scatter(x, y, s=1)
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-        
-    # # Get the index of the first finite values for each axis = -1
-    # first_finite_mask = np.isfinite(gradient_values)
-    # first_finite_indices = np.argmax( first_finite_mask , axis=-1)
-    # no_finite_elements = first_finite_mask.any(axis=-1) == False
-    # first_finite_indices[no_finite_elements] = 999 
-    # mask_values_after_the_first_finite = np.arange(gradient_values.shape[1])[None, :] > first_finite_indices[:, None]  
-    
+
     # Step 1: Create a mask for valid gradient values
-    # mask_higher_than_threshold = (abs(gradient_values) > threshold_on_gradient_values) & are_pixels_far_from_land & mask_values_after_the_first_finite
     mask_higher_than_threshold = (abs(gradient_values) > threshold_on_gradient_values) & are_pixels_far_from_land
-        
+
     # Step 2: Compute the maximum step index where the gradient exceeds the threshold
-    # max_steps_higher_than_threshold = mask_higher_than_threshold.shape[1] - np.argmax(mask_higher_than_threshold, axis=-1) 
     max_steps_higher_than_threshold = np.argmax( np.cumsum(mask_higher_than_threshold, axis = -1) , axis = -1 )
-    # max_steps_higher_than_threshold[no_finite_elements] = -1
-        
+
     # Step 3: Create a mask for valid steps based on the max step index
     step_mask = (max_steps_higher_than_threshold)[:, None] > np.arange(gradient_values.shape[1])
-    
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
-    # for x, y in gradient_points[step_mask].reshape(-1, gradient_points.shape[-1]) :
-    #     plt.scatter(x, y, s=1)
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-    
+
     # Compute thresholds for absolute values
     superior_limit = np.append( np.nanquantile(absolute_values[np.where(are_pixels_far_from_land)], 0.95), [7] ).min()
     inferior_limit = np.nanquantile( absolute_values[np.where(are_pixels_far_from_land)], 0.05 )
     threshold_on_absolute_values = 10 ** ( np.log10( inferior_limit ) + (( np.log10( superior_limit ) - np.log10( inferior_limit ) ) / 1.5) )
-        
+
     # Combine all masks
-    mask_on_absolute_values = absolute_values > threshold_on_absolute_values # 0.75
+    mask_on_absolute_values = absolute_values > threshold_on_absolute_values
     combined_mask = step_mask & mask_on_absolute_values & are_pixels_far_from_land
 
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
-    # for x, y in gradient_points[combined_mask].reshape(-1, gradient_points.shape[-1]) :
-    #     plt.scatter(x, y, s=1)
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-            
     # Filter values based on the combined mask
     gradient_values_to_keep = gradient_values[np.where(combined_mask)]
     gradient_points_to_keep = gradient_points[np.where(combined_mask)] 
@@ -1038,56 +985,19 @@ def find_SPM_threshold(spm_map, land_mask, start_point, directions, max_steps, m
         The computed SPM threshold value.
     """
     
-    # nb_of_ocean_pixels = len(np.where(land_mask.values == False)[0])
-
-    # Compute gradients and gradient points in specified directions
-    gradient_values, gradient_points, absolute_values = compute_gradient_with_directions_vectorized(spm_map = spm_map, 
-                                                                                   start_point = start_point, 
+    gradient_values, gradient_points, absolute_values = compute_gradient_with_directions_vectorized(spm_map = spm_map,
+                                                                                   start_point = start_point,
                                                                                    directions = directions,
-                                                                                   max_steps = max_steps, # Max steps for gradient expansion
-                                                                                   lower_high_values_to=maximal_threshold, # 7
-                                                                                   create_X_intermediates_between_each_direction = 2) # Number of intermediate directions
+                                                                                   max_steps = max_steps,
+                                                                                   lower_high_values_to=maximal_threshold,
+                                                                                   create_X_intermediates_between_each_direction = 2)
 
-    # threshold_on_gradient_values = 0.35 # 0.2 # 0.15
     threshold_on_gradient_values = np.nanmax(gradient_values[np.isfinite(gradient_values)]) * 0.9
 
-    # are_pixels_far_from_land = pixels_far_from_land(land_mask, pixel_positions = gradient_points, distance_threshold = 20)
-
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = maximal_threshold)
-    # for x, y in gradient_points.reshape(-1, gradient_points.shape[-1]) :
-    #     plt.scatter(x, y, s=1)
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-        
-    # # Plot the gradient values over distance
-    # for i in range(gradient_values.shape[0]):  # Loop over the 3rd dimension (directions)
-    #     plt.plot(gradient_values[i, :], label=f'Direction {i+1}')
-    # plt.hlines([-threshold_on_gradient_values, threshold_on_gradient_values], xmin = 0, xmax = max_steps)
-    # plt.title("Gradient Computation in Specified Directions")
-    # plt.xlabel("Step")
-    # plt.ylabel("Gradient of SPM")
-    # plt.show()   
-
-    # plt.hist(gradient_values.flatten(), bins=10, edgecolor='black', alpha=0.7)
-    # plt.title('Distribution of Gradient Values')
-    # plt.xlabel('Gradient Value')
-    # plt.ylabel('Frequency')
-    # plt.show()
-
-    # Filter gradient points based on specified criteria
     filtered_points, _, filtered_values = filter_gradient_points_vectorized(gradient_values, gradient_points, absolute_values, land_mask,
-                                                                            threshold_on_gradient_values = threshold_on_gradient_values) 
+                                                                            threshold_on_gradient_values = threshold_on_gradient_values)
 
-    # plt.imshow(spm_map[:, :], cmap='viridis', origin = "lower", vmin = 0.1, vmax = maximal_threshold)
-    # for coords in [x for x in filtered_points]:
-    #     plt.scatter(coords[0], coords[1], color='red', s=1)  # Mark the points where gradient was computed
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-
-    # Compute the SPM threshold as the 10th percentile of filtered values
-    # SPM_threshold = np.nanmin( filtered_values )
-    SPM_threshold = np.max( [np.nanquantile(filtered_values, quantile_to_use), minimal_threshold] ) # 0.25
+    SPM_threshold = np.max( [np.nanquantile(filtered_values, quantile_to_use), minimal_threshold] )
     
     return SPM_threshold, filtered_points, gradient_points
 
@@ -1109,10 +1019,6 @@ def find_first_nan_after_finite(arr):
         If no such NaN exists, returns -1 for that direction.
     """
     
-    # Check if the input array has shape (100, 1, 5)
-    # assert arr.shape[1] == 1, "The second dimension must be 1."
-    
-    # Flatten the array along the second dimension
     flattened = arr[:, :]
     
     # Masks for NaN and finite values
@@ -1343,55 +1249,22 @@ def set_mask_area_values_to_False_based_on_an_index_object(mask_area, index_obje
         Updated mask area with False values outside the polygon.
     """
 
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(mask_area, cmap='viridis', origin = "lower")
-    # for x, y in gradient_points[index_to_keep].reshape(-1, gradient_points[index_to_keep].shape[-1]):
-    #     # plt.scatter(x, y, color='red', s=1)  # Mark the points where gradient was computed
-    #     plt.scatter(x, y, s=1)  # Mark the points where gradient was computed
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-
-    # Combine gradient points and ensure no NaNs exist
     points_in_the_polygon = np.vstack( (gradient_points[0], gradient_points[index_object][::-1], gradient_points[0][0]) )
-    # polygon_boundaries = np.vstack( (gradient_points[0][0], gradient_points[index_object][::-1], gradient_points[0][0]) )
     points_in_the_polygon = points_in_the_polygon[ ~np.isnan(points_in_the_polygon).any(axis=1) ]
-    
-    if (np.unique( points_in_the_polygon[:,0] ).size == 1) or (np.unique( points_in_the_polygon[:,1] ).size == 1) : 
+
+    if (np.unique( points_in_the_polygon[:,0] ).size == 1) or (np.unique( points_in_the_polygon[:,1] ).size == 1) :
         return mask_area
-    
-    # Create a convex hull polygon from the points
+
     polygon = ConvexHull( points_in_the_polygon )
     polygon_boundaries = points_in_the_polygon[ np.append(polygon.vertices, polygon.vertices[0]) ]
-    
-    ### Convave version
-    # polygon_boundaries = concave_hull(points_in_the_polygon)
-    
-    # Create a path object for the polygon
+
     polygon_path = mPath(polygon_boundaries, closed=True)
-    
-    
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(mask_area, cmap='viridis', origin = "lower")
-    # plt.title("Gradient Points Following Direction Vectors")
-    # ax = plt.gca()  # Get the current Axes instance
-    # ax.add_patch(PathPatch(polygon_path, facecolor='none', edgecolor='red', lw=2))  # Add the polygon path to the plot
-    # plt.show()
-    
-    # Identify True points in the mask and their coordinates
+
     true_indices = np.where(mask_area.values)
     points = np.column_stack((true_indices[1], true_indices[0]))  # shape (N, 2), where N is number of True points
-   
-    # Check which points are inside the polygon
-    inside_polygon = polygon_path.contains_points(points)   
-    
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(mask_area, cmap='viridis', origin = "lower")
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.scatter( [x[0] for x in points[inside_polygon]] ,
-    #               [x[1] for x in points[inside_polygon]], 
-    #               color='red')
-    # plt.show()
-   
+
+    inside_polygon = polygon_path.contains_points(points)
+
     # Update the mask by setting points outside the polygon to False
     for i, (row, col) in enumerate(points):
         if not inside_polygon[i]:
@@ -1568,34 +1441,18 @@ def find_index_and_values_of_multiple_directions_in_the_plume_area(mask_area, ds
     """
     
     # Compute gradients along specified directions starting from the pixel
-    _, direction_points, direction_boolean = compute_gradient_with_directions_vectorized(spm_map = mask_area.astype(float), 
-                                                                                    start_point = pixel_starting_point, 
+    _, direction_points, direction_boolean = compute_gradient_with_directions_vectorized(spm_map = mask_area.astype(float),
+                                                                                    start_point = pixel_starting_point,
                                                                                     directions = searching_strategy_direction,
                                                                                     max_steps = max_steps,
-                                                                                    create_X_intermediates_between_each_direction = 2) # 35 for the Gulf of Lion
-    
-    # # Plotting the points where the gradient was computed
-    # plt.imshow(mask_area, cmap='viridis', origin = "lower")
-    # for x, y in direction_points.reshape(-1, direction_points.shape[-1]):
-    #     # plt.scatter(x, y, color='red', s=1)  # Mark the points where gradient was computed
-    #     plt.scatter(x, y, s=1)  # Mark the points where gradient was computed
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-    
-    # Recompute gradients for the reduced dataset
-    _, direction_points, direction_values = compute_gradient_with_directions_vectorized(spm_map = ds_reduced, 
-                                                                                    start_point = pixel_starting_point, 
+                                                                                    create_X_intermediates_between_each_direction = 2)
+
+    _, direction_points, direction_values = compute_gradient_with_directions_vectorized(spm_map = ds_reduced,
+                                                                                    start_point = pixel_starting_point,
                                                                                     directions = searching_strategy_direction,
                                                                                     max_steps = max_steps,
-                                                                                    create_X_intermediates_between_each_direction = 2) # 35 for the Gulf of Lion
-    
-    # plt.imshow(ds_reduced, cmap='viridis', origin = "lower", vmin = 0.1, vmax = 10)
-    # for x, y in direction_points.reshape(-1, direction_points.shape[-1]):
-    #     # plt.scatter(x, y, color='red', s=1)  # Mark the points where gradient was computed
-    #     plt.scatter(x, y, s=1)  # Mark the points where gradient was computed
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-    
+                                                                                    create_X_intermediates_between_each_direction = 2)
+
     # Check if all values are zero, indicating no plume area
     if (direction_values == 0).all() or (direction_boolean == 0).all() :                         
         
@@ -1663,8 +1520,19 @@ def return_stats_dictionnary(final_mask_area, spm_reduced_map, spm_map, paramete
         Dictionary containing plume statistics or an empty dictionary with NaN values.
     """
         
-    def make_an_empty_dict() : 
-        
+    def make_an_empty_dict() :
+
+        """
+        Build the NaN-filled statistics dictionary used when no plume can be
+        characterized (empty plume area, or `return_empty_dict=True`).
+
+        Returns
+        -------
+        dict
+            Same keys as the non-empty case, with every statistic set to
+            ``numpy.nan`` except for ``'date'``.
+        """
+
         # Initialize an empty dictionary with NaN values
         data_to_return = {'date' : np.array(spm_reduced_map.date_for_plot)}
         data_to_return.update({f'{stat_name}': np.nan for stat_name in ['n_pixel_in_the_plume_area', 'area_of_the_plume_mask_in_km2', 
@@ -1801,12 +1669,13 @@ def derive_masks_from_bathymetry(
 
     Returns
     -------
-    tuple
-        A tuple containing:
-        - xarray.DataArray: Boolean mask on the input grid where True represents water
-          inside the cloud-checking area.
-        - xarray.DataArray: Boolean mask on the reduced grid where True represents land.
-    """ 
+    tuple of xarray.DataArray
+        A two-element tuple:
+
+        - Boolean mask on the input grid where True represents water inside
+          the cloud-checking area.
+        - Boolean mask on the reduced grid where True represents land.
+    """
 
     water_mask = bathymetry_map.notnull() & (bathymetry_map < 0)
     lat_bounds = coordinate_range_bounds(parameters['lat_range_of_plume_area'])
@@ -1839,12 +1708,13 @@ def Check_if_the_area_is_too_cloudy(dataset, cloud_check_water_mask, parameters)
         in the cloud-coverage calculation.
     parameters : dict
         Dictionary of parameters, including:
-        - 'lat_range_of_plume_area': tuple of float
-            Latitude range of the sub-area to evaluate.
-        - 'lon_range_of_plume_area': tuple of float
-            Longitude range of the sub-area to evaluate.
-        - 'threshold_of_cloud_coverage_in_percentage': float
-            Percentage threshold to determine if the area is too cloudy.
+
+        - ``lat_range_of_plume_area`` (tuple of float): latitude range of the
+          sub-area to evaluate.
+        - ``lon_range_of_plume_area`` (tuple of float): longitude range of the
+          sub-area to evaluate.
+        - ``threshold_of_cloud_coverage_in_percentage`` (float): percentage
+          threshold above which the area is considered too cloudy.
 
     Returns
     -------
@@ -1872,14 +1742,6 @@ def Check_if_the_area_is_too_cloudy(dataset, cloud_check_water_mask, parameters)
         test = (100 * n_cloudy_pixels / n_total_pixel) > parameters['threshold_of_cloud_coverage_in_percentage']
 
     return test
-
-    # if n_total_pixel == 0:
-    #     return False
-
-    # cloud_test = (100 * n_cloudy_pixels / n_total_pixel) > parameters['threshold_of_cloud_coverage_in_percentage']
-    
-    # Return the result indicating whether the area is too cloudy.
-    # return cloud_test
 
 
 def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM_threshold, maximal_threshold, max_steps = 20) : 
@@ -1942,38 +1804,15 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
                                                                                    lower_high_values_to = np.min( [SPM_threshold*5, maximal_threshold] ),
                                                                                    create_X_intermediates_between_each_direction = 2) # Number of intermediate directions
 
-    if gradient_values is None : 
-        # mask_values_equal_to_SPM_threshold = absolute_values.values == SPM_threshold*1.5
-        # max_steps_for_each_direction = np.array([ first_true_block(arr)[1] for arr in mask_values_equal_to_SPM_threshold ])
-        return None  
+    if gradient_values is None :
+        return None
 
-    # Define a threshold for detecting significant changes in SPM gradient
-    # threshold_on_gradient_values = -0.15 # 0.2
     threshold_on_gradient_values = np.nanmax(gradient_values[np.isfinite(gradient_values)]) * 0.9
 
-    # # Plot the direction points on the SPM map
-    # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
-    # for x, y in direction_points.reshape(-1, direction_points.shape[-1]) :
-    #     plt.scatter(x, y, s=1)
-    # plt.title("Gradient Points Following Direction Vectors")
-    # plt.show()
-        
-    # # Plot gradient values over distance for each direction
-    # for i in range(gradient_values.shape[0]):  # Loop over the 3rd dimension (directions)
-    #     plt.plot(gradient_values[i, :], label=f'Direction {i+1}')
-    # plt.hlines(threshold_on_gradient_values, xmin = 0, xmax = max_steps)
-    # plt.title("Gradient Computation in Specified Directions")
-    # plt.xlabel("Step")
-    # plt.ylabel("Gradient of SPM")
-    # plt.show()   
-    
-    # Mask 1: Detect areas below the gradient threshold                
+    # Mask 1: Detect areas below the gradient threshold
     mask_lower_than_threshold = ( gradient_values < threshold_on_gradient_values)
     test_to_select_the_max_step = np.cumsum(mask_lower_than_threshold, axis = -1)
-    max_steps_for_each_direction = np.argmax( test_to_select_the_max_step == 1 , axis = -1 ) 
-       
-    # test_to_select_the_max_step[test_to_select_the_max_step > 2] = 2
-    
+    max_steps_for_each_direction = np.argmax( test_to_select_the_max_step == 1 , axis = -1 )
 
     # Mask 2: Adjust max steps for directions touching land or exceeding SPM threshold
     for index in np.where(max_steps_for_each_direction == 0)[0] :
@@ -1999,16 +1838,7 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
     polygon = ConvexHull( polygon_boundaries )
     polygon_boundaries = polygon_boundaries[ np.append(polygon.vertices, polygon.vertices[0]) ]
     
-    # Create a polygon path object
     polygon_path = mPath(polygon_boundaries, closed=True)
-    
-    # # Plot the final plume boundary
-    # plt.imshow(spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
-    # plt.title("Gradient Points Following Direction Vectors")
-    # ax = plt.gca()  # Get the current Axes instance
-    # ax.add_patch(PathPatch(polygon_path, facecolor='none', edgecolor='red', lw=2))  # Add the polygon path to the plot
-    # plt.show()
-                        
     return polygon_path
 
 
@@ -2080,9 +1910,7 @@ def main_process(file_name,
                   if parameters['lat_new_resolution'] is not None
                   else ds)
 
-    # Initialize a list to store masks for all plume areas
     all_mask_area = []
-    all_river_mouth_to_remove = []
     thresholds = {key: None for key in parameters['starting_points']}
 
     # If the percentage of cloud coverage exceeds the specified threshold, return default values without processing the plume area
@@ -2124,8 +1952,6 @@ def main_process(file_name,
 
         thresholds[plume_name] = the_plume.SPM_threshold
         all_mask_area.append(the_plume.plume_mask)
-        if "close_river_mouth_mask" in vars(the_plume):
-            all_river_mouth_to_remove.append(the_plume.close_river_mouth_mask)
 
     # If no valid plume area is detected, plot and return default values
     if (len(all_mask_area) == 0) or (any([x.values.any() for x in all_mask_area]) == False):
@@ -2150,13 +1976,6 @@ def main_process(file_name,
 
     # Combine all detected plume areas using logical OR
     final_mask_area = reduce(np.logical_or, all_mask_area)
-    # final_close_river_mouth_area = reduce(np.logical_or, all_river_mouth_to_remove)
-
-    # Save the final_mask_area as a .csv file in output_stem directory
-    # final_mask_area_df = final_mask_area.to_dataframe(name='plume_mask').reset_index()
-    # final_mask_area_df = final_mask_area_df[final_mask_area_df['plume_mask']]
-    # final_mask_area_df = final_mask_area_df.rename(columns={'date_for_plot': 'date'})
-    # final_mask_area_df.to_csv(f'{os.path.splitext(output_stem)[0]}_plume_mask.csv', index=False)
     value_col = ds_reduced.name or "spm"
     masked = ds_reduced.where(final_mask_area)
     masked_df = masked.to_dataframe(name=value_col).reset_index()
@@ -2177,7 +1996,7 @@ def main_process(file_name,
                   thresholds=thresholds,
                   plot_the_plume_area=True,
                   mask_area=final_mask_area,
-                  close_river_mouth_area=None, #final_close_river_mouth_area,
+                  close_river_mouth_area=None,
                   pixel_done=None,
                   coast_shape=coast_shape,
                   show_bathymetric_mask=True)
@@ -2214,33 +2033,6 @@ class Create_the_plume_mask :
         Name of the plume being processed.
     parameters : dict
         Configuration and parameters for plume detection.
-
-    Methods
-    -------
-    determine_SPM_threshold(manual_determination_of_SPM_threshold=None)
-        Determines the SPM threshold for plume detection.
-    do_a_raw_plume_detection()
-        Performs initial plume area detection.
-    include_cloudy_regions_to_plume_area()
-        Expands the plume area to include cloudy regions.
-    remove_the_areas_with_sediment_resuspension(maximal_bathymetry=None, minimal_distance_from_estuary=None)
-        Removes areas with sediment resuspension.
-    remove_shallow_waters(bathymetric_threshold=None)
-        Removes shallow water areas from the plume.
-    dilate_the_main_plume_area_to_merge_close_plume_areas()
-        Merges closely located plume areas.
-    remove_small_shapes_that_do_not_meet_a_minimum_size_criterion(minimum_size_threshold=3)
-        Removes small shapes that do not meet a size threshold.
-    set_pixels_to_False_if_outside_of_the_searching_area(searching_area)
-        Masks plume pixels outside the specified searching area.
-    identify_the_main_plume_shape_based_on_the_plume_core_location(plume_core_location=None)
-        Identifies the main plume shape based on core location.
-    remove_parts_of_the_plume_area_identified_only_on_the_edge_of_the_searching_area()
-        Removes parts of the plume area identified on the search area edge.
-    remove_parts_of_the_plume_area_with_very_high_SPM_on_the_edge_of_the_searching_zone()
-        Removes plume areas with high SPM values near the edge of the search zone.
-    remove_parts_of_the_plume_area_that_widden_after_the_shrinking_phase()
-        Removes plume areas that widen after the shrinking phase.
     """
     
     def __init__(self, spm_reduced_map, bathymetry_map_aligned_to_spm_reduced_map, land_mask, parameters, plume_name) :
@@ -2284,15 +2076,6 @@ class Create_the_plume_mask :
             User-specified SPM threshold. If False, the threshold is determined automatically.
         """
         
-        # spm_map = self.spm_map
-        # land_mask = self.land_mask
-        # start_point = self.parameters['pixel_starting_points'][self.plume_name]
-        # directions = self.parameters['searching_strategy_directions'][self.plume_name]
-        # max_steps = self.parameters['max_steps_for_the_directions'][self.plume_name]
-        # maximal_threshold = self.parameters['maximal_threshold'][self.plume_name]
-        # minimal_threshold = self.parameters['minimal_threshold'][self.plume_name]
-        # quantile_to_use = self.parameters['quantile_to_use'][self.plume_name]
-        
         if dynamic_determination_of_SPM_threshold : 
             SPM_threshold, points_used_for_finding_SPM_threshold, all_points_tested = find_SPM_threshold(spm_map = self.spm_map, 
                                                 land_mask = self.land_mask,
@@ -2320,11 +2103,6 @@ class Create_the_plume_mask :
         """
         Perform the initial detection of the plume area.
         """
-        
-        # data = self.spm_map.values
-        # start = self.parameters['pixel_starting_points'][self.plume_name]
-        # SPM_threshold = self.SPM_threshold
-        # directions = self.parameters['searching_strategy_directions'][self.plume_name]
         
         mask, pixel_done = flood_fill(data = self.spm_map.values, 
                                       start = self.parameters['pixel_starting_points'][self.plume_name],
@@ -2555,8 +2333,6 @@ class Create_the_plume_mask :
                 sequence_values = values_in_the_area_of_the_plume[:, index]
                 sequence_plume_idd = boolean_values_in_the_area_of_the_plume[:, index]
                 
-                # Find the indices where the values exceed the threshold
-                # above_threshold = sequence_values > SPM_threshold
                 above_threshold = sequence_plume_idd == 1
                      
                 first_block_index = first_true_block( above_threshold )
@@ -2643,33 +2419,18 @@ class Create_the_plume_mask :
         self.close_river_mouth_mask = xr.zeros_like(self.plume_mask)
         
         # Loop through each provided river mouth position
-        for i, position_of_a_river_mouth in positions_of_river_mouths.items() :  
-            
-            # spm_map = self.spm_map
-            # land_mask = self.land_mask
-            # start_point = position_of_a_river_mouth
-            # SPM_threshold = self.SPM_threshold
-            # maximal_threshold = self.parameters['maximal_threshold'][self.plume_name]
-            # max_steps = 20
-            
-            # Delimit the plume area for the current river mouth
-            delimitation_of_the_plume =  fast_delimitation_of_a_river_plume_area(spm_map = self.spm_map, 
+        for i, position_of_a_river_mouth in positions_of_river_mouths.items() :
+
+            delimitation_of_the_plume = fast_delimitation_of_a_river_plume_area(spm_map = self.spm_map,
                                                                                 land_mask = self.land_mask,
                                                                                 start_point = position_of_a_river_mouth,
                                                                                 SPM_threshold = self.SPM_threshold,
                                                                                 maximal_threshold = self.parameters['maximal_threshold'][self.plume_name],
                                                                                 max_steps = 20)
-            
-            if delimitation_of_the_plume is None : 
+
+            if delimitation_of_the_plume is None :
                 continue
-                                
-            # # Optional: Uncomment the lines below to visualize the plume boundary
-            # plt.imshow(self.spm_map, cmap='viridis', origin = "lower", vmin = 0.5, vmax = 8)
-            # plt.title("Gradient Points Following Direction Vectors")
-            # ax = plt.gca()  # Get the current Axes instance
-            # ax.add_patch(PathPatch(delimitation_of_the_plume, facecolor='none', edgecolor='red', lw=2))  # Add the polygon path to the plot
-            # plt.show()
-            
+
             # Identify the coordinates of plume pixels currently marked as True
             true_indices = np.where(self.plume_mask.values)
             points = np.column_stack((true_indices[1], true_indices[0])) # Convert to (x, y) coordinates
@@ -2698,6 +2459,41 @@ def Pipeline_to_delineate_the_plume(ds_reduced,
                                     plume_name,
                                     inside_polygon_mask,
                                     dynamic_thresh):
+
+    """
+    Run the full `Create_the_plume_mask` refinement sequence for one plume.
+
+    Instantiates `Create_the_plume_mask` and drives it through threshold
+    determination, raw detection, cloud-region inclusion, resuspension and
+    shallow-water removal, close-river-mouth removal, dilation/merging,
+    small-shape removal, restriction to the searching area, and main-shape
+    identification. The final shrink-widen cleanup step is skipped for the
+    ``'Seine'`` plume.
+
+    Parameters
+    ----------
+    ds_reduced : xr.DataArray
+        SPM dataset at reduced resolution.
+    bathymetry_data_aligned_to_reduced_map : xr.DataArray
+        Bathymetry aligned to the reduced-resolution grid.
+    land_mask : xr.DataArray
+        Boolean map where True indicates land.
+    parameters : dict
+        Configuration and parameters for plume detection.
+    plume_name : str
+        Name of the plume being processed.
+    inside_polygon_mask : xr.DataArray
+        Boolean mask restricting detection to the configured plume-area polygon.
+    dynamic_thresh : bool
+        Whether to determine the SPM threshold dynamically rather than using
+        the configured fixed value.
+
+    Returns
+    -------
+    Create_the_plume_mask
+        The plume object after all refinement steps have been applied.
+    """
+
     the_plume = Create_the_plume_mask(ds_reduced,
                                       bathymetry_data_aligned_to_reduced_map,
                                       land_mask,
@@ -2705,40 +2501,21 @@ def Pipeline_to_delineate_the_plume(ds_reduced,
                                       plume_name)
 
     the_plume.determine_SPM_threshold(dynamic_thresh)
-    # the_plume.SPM_threshold = 10
-
     the_plume.do_a_raw_plume_detection()
-    # the_plume.plume_mask.plot()
-
     the_plume.include_cloudy_regions_to_plume_area()
-
     the_plume.remove_the_areas_with_sediment_resuspension(
         maximal_bathymetry=parameters['maximal_bathymetric_for_zone_with_resuspension'][plume_name],
         minimal_distance_from_estuary=parameters['minimal_distance_from_estuary_for_zone_with_resuspension'][
             plume_name])
-
     the_plume.remove_shallow_waters()
-
     the_plume.remove_close_river_mouth(the_plume.parameters['pixel_starting_points_close_river_mouth'])
-
     the_plume.dilate_the_main_plume_area_to_merge_close_plume_areas()
-
     the_plume.remove_small_shapes_that_do_not_meet_a_minimum_size_criterion()
-
     the_plume.set_pixels_to_False_if_outside_of_the_searching_area(inside_polygon_mask)
-
     the_plume.identify_the_main_plume_shape_based_on_the_plume_core_location()
-
     the_plume.remove_shallow_waters()
-
-    # the_plume.remove_parts_of_the_plume_area_identified_only_on_the_edge_of_the_searching_area()
-
-    # the_plume.remove_parts_of_the_plume_area_with_very_high_SPM_on_the_edge_of_the_searching_zone()
 
     if not np.isin(plume_name, ['Seine']):
         the_plume.remove_parts_of_the_plume_area_that_widden_after_the_shrinking_phase()
 
-    # the_plume.plume_mask.plot()
-    # the_plume.close_river_mouth_mask.plot()
-    # the_plume.protocol
     return the_plume
