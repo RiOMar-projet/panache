@@ -228,9 +228,9 @@ def flood_fill(data, start, SPM_threshold, directions):
                     
         # Generate the coordinates of neighboring cells based on the current location and directions
         coordinates_to_inspect = [ (lat_i + d_lat, lon_i + d_lon) for d_lat, d_lon in directions]
-        
+
         # If any neighboring cell is out of bounds (either row or column), skip to the next iteration
-        if ( any( [ (x[0] > data.shape[0]-1) or (x[0] < 0)  for x in coordinates_to_inspect] ) or 
+        if ( any( [ (x[0] > data.shape[0]-1) or (x[0] < 0)  for x in coordinates_to_inspect] ) or
              any( [ (x[1] > data.shape[1]-1) or (x[1] < 0) for x in coordinates_to_inspect] ) ) :
             continue
         
@@ -243,9 +243,14 @@ def flood_fill(data, start, SPM_threshold, directions):
                 closest_coordinates = coordinates_to_inspect
                 
                 # Continue searching for finite values within the data array until at least 10 are found
-                # TODO: Look into what causes this to not find values and to return NaN
-                while (len(closest_finite_values) < 10) and (len(closest_coordinates) < 100) : #<400000000
-                    closest_coordinates = [ (lat_coord + d_lat, lon_coord + d_lon) for d_lat, d_lon in directions for lat_coord, lon_coord in closest_coordinates]
+                while (len(closest_finite_values) < 10) and (len(closest_coordinates) < 100) :
+                    closest_coordinates = [ (lat_coord + d_lat, lon_coord + d_lon)
+                                           for d_lat, d_lon in directions
+                                           for lat_coord, lon_coord in closest_coordinates
+                                           if 0 <= lat_coord + d_lat < data.shape[0]
+                                           and 0 <= lon_coord + d_lon < data.shape[1] ]
+                    if not closest_coordinates :
+                        break
                     closest_finite_values = [ data[ coordinates ] for coordinates in closest_coordinates if np.isfinite( data[ coordinates ] ) ]
                     
                 # If more than 80% of the closest finite values exceed the threshold, mark the mask as True
@@ -531,10 +536,15 @@ def make_the_plot(path_to_the_figure_file_to_save,
         # Add a title summarizing the plume detection
         fig.suptitle(f'Plume detection ({os.path.basename(path_to_the_figure_file_to_save)})', fontsize = 20)
        
-    else : 
-        
-        # Add a placeholder title when no plume is detected
-        fig.suptitle(f'No plume detection because too much nan in the searching area ({os.path.basename(path_to_the_figure_file_to_save)})', fontsize = 20)
+    else :
+        ds.plot(vmin=min_color_bar, vmax=max_color_bar, norm=colors.LogNorm())
+        if coast_shape is not None:
+            coast_shape.boundary.plot(ax=ax2, linewidth=1, edgecolor='black')
+        ax2.set_xlabel('')
+        ax2.set_ylabel('')
+        ax2.set_xlim(lon_plot_bounds)
+        ax2.set_ylim(lat_plot_bounds)
+        fig.suptitle(f'No plume detection ({os.path.basename(path_to_the_figure_file_to_save)})', fontsize=20)
         
     # Add a title to the second subplot with bathymetric and SPM threshold details
     ax2.set_title(f'Area with bathy > {bathymetric_threshold}m and SPM {"; ".join([f"> {round(value, 1)} ({key})" for key, value in thresholds.items() if value is not None])} g m-3')
@@ -729,14 +739,14 @@ def Set_cloudy_regions_to_True(ds_reduced, mask_area, land_mask, SPM_threshold) 
                                 [True, True, True]])
     
     # Iterate through each labeled region of False values (non-plume areas)
-    for false_area_idd in range(num_false_features+1) : 
-        
+    for false_area_idd in range(num_false_features+1) :
+
         # Create a boolean mask for the current false area
         false_area = (labeled_false_array == false_area_idd)
-        
+
         # Skip areas that touch the edge of the map as they are not enclosed
-        if (any( false_area[0,:] ) or any( false_area[:,0] ) or any( false_area[-1,:] ) or any( false_area[:,-1] )) : 
-           continue      
+        if (any( false_area[0,:] ) or any( false_area[:,0] ) or any( false_area[-1,:] ) or any( false_area[:,-1] )) :
+           continue
         
         # Dilate the false area to expand its boundary
         false_area_diluted = binary_dilation(false_area, structure=dilation_strategy)
@@ -1533,13 +1543,15 @@ def return_stats_dictionnary(final_mask_area, spm_reduced_map, spm_map, paramete
             ``numpy.nan`` except for ``'date'``.
         """
 
-        # Initialize an empty dictionary with NaN values
-        data_to_return = {'date' : np.array(spm_reduced_map.date_for_plot)}
-        data_to_return.update({f'{stat_name}': np.nan for stat_name in ['n_pixel_in_the_plume_area', 'area_of_the_plume_mask_in_km2', 
-                                                                        'mean_SPM_in_the_plume_area', 'sd_SPM_in_the_plume_area', 
-                                                                        'mass_SPM_in_the_plume_area_in_g_m', 'lat_centroid_of_the_plume_area',
-                                                                        'lon_centroid_of_the_plume_area', 'lat_weighted_centroid_of_the_plume_area',
-                                                                        'lon_weighted_centroid_of_the_plume_area', 'confidence_index_in_perc']})
+        data_to_return = {'date': np.array(spm_reduced_map.date_for_plot)}
+        data_to_return.update({f'{stat_name}': 0 for stat_name in ['n_pixel_in_the_plume_area', 'area_of_the_plume_mask_in_km2',
+                                                                    'mean_SPM_in_the_plume_area', 'sd_SPM_in_the_plume_area',
+                                                                    'mass_SPM_in_the_plume_area_in_g_m']})
+        data_to_return.update({f'{stat_name}': np.nan for stat_name in ['lat_centroid_of_the_plume_area',
+                                                                         'lon_centroid_of_the_plume_area',
+                                                                         'lat_weighted_centroid_of_the_plume_area',
+                                                                         'lon_weighted_centroid_of_the_plume_area']})
+        data_to_return['confidence_index_in_perc'] = 0
         data_to_return.update({f'SPM_threshold_{plume_name}': np.nan for plume_name, threshold in thresholds.items()})
         
         return data_to_return
@@ -1954,8 +1966,9 @@ def main_process(file_name,
         all_mask_area.append(the_plume.plume_mask)
 
     # If no valid plume area is detected, plot and return default values
-    if (len(all_mask_area) == 0) or (any([x.values.any() for x in all_mask_area]) == False):
-        print(f"Skipping {plume_name}: no plume area detected.", flush=True)
+    if not any(x.values.any() for x in all_mask_area):
+        checked = ', '.join(parameters['starting_points'].keys())
+        print(f"No plume detected in {os.path.basename(output_stem)} for any starting point ({checked}); saving empty plot.", flush=True)
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       lon_range_of_plume_area=parameters['lon_range_of_plume_area'],
                       lat_range_of_plume_area=parameters['lat_range_of_plume_area'],
