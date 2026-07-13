@@ -3,14 +3,30 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "panache"
+name = "panache-riomar"
 version = "0.2.1"
 description = "River plume detection on gridded data"
+readme = "README.md"
+license = {file = "LICENSE"}
 authors = [
   {name = "Louis Terrats"},
   {name = "Robert W. Schlegel"},
 ]
 requires-python = ">=3.10"
+keywords = ["river plume", "remote sensing", "oceanography", "SPM", "NetCDF"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Remote Sensing",
+  "Topic :: Scientific/Engineering :: Marine Science",
+  "Topic :: Scientific/Engineering :: GIS",
+]
 dependencies = [
   "geopandas",
   "imageio",
@@ -30,6 +46,12 @@ docs = [
   "sphinx",
   "pydata-sphinx-theme",
 ]
+
+[project.urls]
+Homepage = "https://github.com/RiOMar-projet/panache"
+Documentation = "https://RiOMar-projet.github.io/panache/"
+Repository = "https://github.com/RiOMar-projet/panache"
+Issues = "https://github.com/RiOMar-projet/panache/issues"
 
 [project.scripts]
 panache = "panache.cli:main"

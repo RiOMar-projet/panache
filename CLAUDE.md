@@ -39,6 +39,28 @@ python testing/smoke_test_module.py --with-plots   # also generates PNG/GIF outp
 
 The integration scripts `testing/test_single_file_plume.py` and `testing/test_batch_plume.py` require real SPM NetCDF data from a local `pCloudDrive` path and are not intended for CI.
 
+## Publishing to PyPI
+
+The distribution is named `panache-riomar` on PyPI (the name `panache` was already taken by an unrelated package); the importable module and `panache` CLI command are unaffected.
+
+Releases are built and published automatically by `.github/workflows/publish.yml` whenever a GitHub Release is published, using [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC — no stored API token). Before the first release, register this repo/workflow as a trusted publisher for the `panache-riomar` project in PyPI's project settings.
+
+To release a new version:
+
+1. Bump `version` in `pyproject.toml`.
+2. Tag and publish a GitHub Release from that commit.
+3. The `publish` workflow builds the sdist/wheel and uploads them to PyPI.
+
+To build and check a release locally first:
+
+```bash
+pip install build twine
+python -m build
+twine check dist/*
+```
+
+Test the process against [TestPyPI](https://test.pypi.org/) before a real release if making packaging changes.
+
 ## Architecture
 
 ```
