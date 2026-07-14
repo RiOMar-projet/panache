@@ -9,8 +9,6 @@ from .utils import define_parameters, searching_strategy_directions_from_presets
 
 
 REQUIRED_PARAMETER_KEYS = {
-    "lon_new_resolution",
-    "lat_new_resolution",
     "searching_strategies",
     "bathymetric_threshold",
     "starting_points",
@@ -45,6 +43,8 @@ class RunConfig:
     parameters: dict | None = None
     spm_threshold: float | None = None
     global_threshold_quantile: float | None = None
+    lat_new_resolution: float | None = None
+    lon_new_resolution: float | None = None
 
 
 def _required_bool(data: dict, key: str) -> bool:
@@ -120,4 +120,6 @@ def load_run_config(config_path: str | Path) -> RunConfig:
         parameters=parameters,
         spm_threshold=float(raw_spm_threshold) if raw_spm_threshold is not None else None,
         global_threshold_quantile=float(raw_quantile) if raw_quantile is not None else None,
+        lat_new_resolution=float(data["lat_new_resolution"]) if data.get("lat_new_resolution") is not None else None,
+        lon_new_resolution=float(data["lon_new_resolution"]) if data.get("lon_new_resolution") is not None else None,
     )

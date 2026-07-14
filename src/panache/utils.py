@@ -263,8 +263,6 @@ def define_parameters(Zone) :
         return None
 
     if Zone == 'BAY_OF_SEINE' :
-        lon_new_resolution = 0.015
-        lat_new_resolution = 0.015
         searching_strategies = {'Seine': 'westward_fan'}
         bathymetric_threshold = 0
         starting_points = {'Seine' : (49.43, 0.145)}
@@ -282,25 +280,23 @@ def define_parameters(Zone) :
         river_mouth_to_exclude = {'Canal de Caen à la mer' : [49.296, -0.245]}
         
     elif Zone == 'BAY_OF_BISCAY' :
-        lon_new_resolution = 0.015
-        lat_new_resolution = 0.015
         searching_strategies = {
             'Gironde': 'westward_fan',
             'Charente': 'westward_fan',
             'Sevre': 'westward_fan',
         }
         bathymetric_threshold = 0
-        starting_points = {'Gironde' : (45.60, -1.10),
-                           'Charente' : (45.945, -1.11),
-                           'Sevre' : (46.27, -1.17)}
-        core_of_the_plumes = {'Gironde' : (45.59, -1.05),
-                              'Charente' : (45.98, -1.17),
+        starting_points = {'Gironde' : (45.61, -1.14),
+                           'Charente' : (45.96, -1.16),
+                           'Sevre' : (46.26, -1.2)}
+        core_of_the_plumes = {'Gironde' : (45.59, -1.15),
+                              'Charente' : (45.98, -1.18),
                               'Sevre' : (46.24, -1.24)}
         lat_range_of_plume_area = [44.5, 46.5]
         lon_range_of_plume_area = [-4, -0.5]
         threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
-        minimal_distance_from_estuary_for_zone_with_resuspension = {'Gironde' : 30, 'Charente' : 20, 'Sevre' : 20}
+        minimal_distance_from_estuary_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
         max_steps_for_the_directions = {'Gironde' : 100, 'Charente' : 50, 'Sevre' : 50}
         maximal_threshold = {'Gironde' : 8, 'Charente' : 10, 'Sevre' : 8} 
         minimal_threshold = {'Gironde' : 4, 'Charente' : 6, 'Sevre' : 4} 
@@ -309,8 +305,6 @@ def define_parameters(Zone) :
         river_mouth_to_exclude = {}
     
     elif Zone == 'GULF_OF_LION' :
-        lon_new_resolution = 0.015
-        lat_new_resolution = 0.015
         searching_strategies = {
             'Grand Rhone': 'southward_fan',
             'Petit Rhone': 'southward_fan',
@@ -333,8 +327,6 @@ def define_parameters(Zone) :
         river_mouth_to_exclude = {}
       
     elif Zone == 'SOUTHERN_BRITTANY':
-        lon_new_resolution = 0.015
-        lat_new_resolution = 0.015
         searching_strategies = {
             'Loire': 'westward_fan',
             'Vilaine': 'westward_fan',
@@ -363,9 +355,7 @@ def define_parameters(Zone) :
     searching_strategy_directions = searching_strategy_directions_from_presets(searching_strategies)
     
     return {
-        'lon_new_resolution' : lon_new_resolution, 
-        'lat_new_resolution' : lat_new_resolution, 
-        'searching_strategies' : searching_strategies, 
+        'searching_strategies' : searching_strategies,
         'bathymetric_threshold' : bathymetric_threshold, 
         'starting_points' : starting_points, 
         'core_of_the_plumes' : core_of_the_plumes,

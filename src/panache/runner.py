@@ -124,20 +124,20 @@ def compute_global_threshold(
     variable_name: str | None,
     quantile: float,
     sample_ds: xr.DataArray,
-) -> float:
-    """Compute a single SPM quantile threshold from the full input dataset.
+) -> tuple[float, tuple[float, float]]:
+    """Compute the SPM quantile threshold and colourbar limits from the full input dataset.
 
-    Loads every file in the bbox crop, concatenates all finite values, and
-    returns ``np.nanquantile(all_values, quantile)``.  Before loading, prints
-    an estimate of the RAM required and, when psutil is available, checks that
-    sufficient memory is free.
+    Loads every file in the bbox crop once, concatenates all finite values, and
+    returns ``(threshold, (vmin, vmax))``.  Before loading, prints an estimate of
+    the RAM required and, when psutil is available, checks that sufficient memory
+    is free.
     """
     n = len(input_files)
     n_pixels = sample_ds.size
     bytes_needed = n * n_pixels * 8  # float64 worst case
     gb_needed = bytes_needed / 1e9
 
-    print(f"\nComputing global SPM threshold ({quantile:.0%}-ile) from {n} files.")
+    print(f"\nComputing global SPM threshold ({quantile:.0%}-ile) and colourbar limits from {n} files.")
     print(f"  Estimated peak RAM required: {gb_needed:.2f} GB", flush=True)
 
     if _HAS_PSUTIL:
@@ -185,8 +185,72 @@ def compute_global_threshold(
 
     combined = np.concatenate(all_values)
     threshold = float(np.nanquantile(combined, quantile))
-    print(f"  Global SPM threshold ({quantile:.0%}-ile): {threshold:.4f}\n", flush=True)
-    return threshold
+    finite = combined[np.isfinite(combined) & (combined > 0)]
+    if finite.size > 0:
+        vmin = float(max(np.nanmin(finite), 0.1))
+        vmax = float(max(np.nanquantile(finite, 0.95), 1.0))
+    else:
+        vmin, vmax = 0.1, 1.0
+    print(f"  Global SPM threshold ({quantile:.0%}-ile): {threshold:.4f}", flush=True)
+    print(f"  Global colourbar: vmin={vmin:.4f}, vmax={vmax:.4f}\n", flush=True)
+    return threshold, (vmin, vmax)
+
+
+def compute_global_colour_limits(
+    input_files: list[Path],
+    parameters: dict,
+    variable_name: str | None,
+    sample_ds: xr.DataArray,
+) -> tuple[float, float]:
+    """Compute vmin/vmax for the colourbar from the full input dataset.
+
+    Returns (vmin, vmax) where vmin >= 0.1 and vmax >= 1.0, derived from the
+    5th and 95th percentiles of all finite values across the bbox and all time steps.
+    """
+    n = len(input_files)
+    n_pixels = sample_ds.size
+    bytes_needed = n * n_pixels * 8
+    gb_needed = bytes_needed / 1e9
+
+    print(f"\nComputing global colourbar limits from {n} files.", flush=True)
+
+    if _HAS_PSUTIL:
+        available_gb = psutil.virtual_memory().available / 1e9
+        if bytes_needed > psutil.virtual_memory().available:
+            print(
+                f"  Warning: insufficient RAM ({gb_needed:.1f} GB needed, "
+                f"{available_gb:.1f} GB available). Falling back to first-file colour limits.",
+                flush=True,
+            )
+            vals = sample_ds.values.ravel()
+            finite = vals[np.isfinite(vals) & (vals > 0)]
+            if finite.size == 0:
+                return 0.1, 1.0
+            return float(max(np.nanmin(finite), 0.1)), float(max(np.nanquantile(finite, 0.95), 1.0))
+
+    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
+    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
+    all_values: list[np.ndarray] = []
+
+    for path in input_files:
+        try:
+            da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
+            vals = da.values.ravel()
+            all_values.append(vals[np.isfinite(vals) & (vals > 0)])
+        except NoValidMapDataError:
+            continue
+        except Exception as exc:
+            print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
+            continue
+
+    if not all_values:
+        return 0.1, 1.0
+
+    combined = np.concatenate(all_values)
+    vmin = float(max(np.nanmin(combined), 0.1))
+    vmax = float(max(np.nanquantile(combined, 0.95), 1.0))
+    print(f"  Global colourbar: vmin={vmin:.4f}, vmax={vmax:.4f}\n", flush=True)
+    return vmin, vmax
 
 
 def _read_manifest(output_dir: Path) -> set[str]:
@@ -232,9 +296,25 @@ def run_batch(config: RunConfig) -> Path:
     parameters = config.parameters
 
     ds, input_files = _load_first_valid_map_data(input_files, parameters, config.variable_name)
+
+    native_lat_res = float(np.diff(ds.lat.values).mean())
+    native_lon_res = float(np.diff(ds.lon.values).mean())
+    print(f"Native data resolution: {native_lat_res:.5f}° lat × {native_lon_res:.5f}° lon", flush=True)
+
+    if config.lat_new_resolution is not None or config.lon_new_resolution is not None:
+        target_lat = config.lat_new_resolution or native_lat_res
+        target_lon = config.lon_new_resolution or native_lon_res
+        lat_factor = round(target_lat / native_lat_res)
+        lon_factor = round(target_lon / native_lon_res)
+        print(
+            f"Regridding to {target_lat:.5f}° lat × {target_lon:.5f}° lon "
+            f"(every {lat_factor} lat pixel(s) and {lon_factor} lon pixel(s) averaged into one).",
+            flush=True,
+        )
+
     ds_reduced = (
-        reduce_resolution(ds, parameters["lat_new_resolution"], parameters["lon_new_resolution"])
-        if parameters["lat_new_resolution"] is not None
+        reduce_resolution(ds, config.lat_new_resolution, config.lon_new_resolution)
+        if config.lat_new_resolution is not None
         else ds
     )
 
@@ -248,27 +328,38 @@ def run_batch(config: RunConfig) -> Path:
     )
 
     # --- Resolve SPM threshold ---
-    # Priority: spm_threshold (user-supplied scalar) > global_threshold_quantile
-    # (computed from data) > fixed_threshold in parameters (per-plume preset values).
+    # Priority: dynamic_threshold (per-scene gradient) > spm_threshold /
+    # global_threshold_quantile (pre-computed scalars) > fixed_threshold in
+    # parameters (zone preset values).
+    # When dynamic_threshold is True, precomputed_threshold stays None so the
+    # per-scene gradient path in plume_algorithm runs unconditionally.
     precomputed_threshold: float | None = None
+    global_colour_limits: tuple[float, float] | None = None
 
-    if config.spm_threshold is not None:
-        precomputed_threshold = config.spm_threshold
-        print(f"Using user-supplied SPM threshold: {precomputed_threshold}")
+    if not config.dynamic_threshold:
+        if config.spm_threshold is not None:
+            precomputed_threshold = config.spm_threshold
+            print(f"Using user-supplied SPM threshold: {precomputed_threshold}")
 
-    elif config.global_threshold_quantile is not None:
-        try:
-            precomputed_threshold = compute_global_threshold(
-                input_files,
-                parameters,
-                config.variable_name,
-                config.global_threshold_quantile,
-                ds,
-            )
-        except MemoryError as exc:
-            raise SystemExit(f"[panache] {exc}") from exc
-        except ValueError as exc:
-            raise SystemExit(f"[panache] {exc}") from exc
+        elif config.global_threshold_quantile is not None:
+            try:
+                precomputed_threshold, global_colour_limits = compute_global_threshold(
+                    input_files,
+                    parameters,
+                    config.variable_name,
+                    config.global_threshold_quantile,
+                    ds,
+                )
+            except MemoryError as exc:
+                raise SystemExit(f"[panache] {exc}") from exc
+            except ValueError as exc:
+                raise SystemExit(f"[panache] {exc}") from exc
+
+    # --- Compute global colourbar limits (skipped when already derived above) ---
+    if global_colour_limits is None:
+        global_colour_limits = compute_global_colour_limits(
+            input_files, parameters, config.variable_name, ds
+        )
 
     # --- Build task list, honouring overwrite=False via manifest + PNG check ---
     prior_processed = _read_manifest(output_dir) if not config.overwrite else set()
@@ -304,6 +395,9 @@ def run_batch(config: RunConfig) -> Path:
                 coast_boundary,
                 config.variable_name,
                 precomputed_threshold,
+                global_colour_limits,
+                config.lat_new_resolution,
+                config.lon_new_resolution,
             )
         )
 

@@ -102,51 +102,35 @@ def reduce_resolution(ds, lat_bin_size_in_degree, lon_bin_size_in_degree):
     return ds_reduced
 
 
-# Maximum BFS radius (in pixels) used when relocating a NaN start pixel.
+# Maximum steps used when relocating a NaN start pixel along the principal fan direction.
 _NAN_START_SEARCH_RADIUS = 50
 
-# All 8 compass directions used for the isotropic BFS in find_nearest_valid_start.
-_ALL_8_DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
-
-def find_nearest_valid_start(data, start, max_radius=_NAN_START_SEARCH_RADIUS):
-    """Find the nearest finite pixel to `start` using isotropic BFS.
+def find_nearest_valid_start(data, start, directions, max_radius=_NAN_START_SEARCH_RADIUS):
+    """Find the nearest finite pixel to `start` along the principal fan direction.
 
     If `start` itself is finite it is returned immediately.  Otherwise the
-    function expands outward in all 8 compass directions, ring by ring, until
-    it finds at least one finite (non-NaN) pixel.  Among all candidates in the
-    first valid ring, the one with the smallest Euclidean pixel distance to the
-    original `start` is returned.  If no finite pixel is found within
-    `max_radius` steps the original `start` is returned unchanged (preserving
-    the pre-existing empty-mask behaviour as a fallback).
+    function walks one pixel at a time in the principal direction of the fan
+    (the middle element of `directions`) until it finds a finite pixel or
+    exhausts `max_radius` steps.  If no finite pixel is found the original
+    `start` is returned unchanged (preserving the pre-existing empty-mask
+    behaviour as a fallback).
     """
     r0, c0 = start
     if np.isfinite(data[r0, c0]):
         return start
 
     n_rows, n_cols = data.shape
-    visited = {start}
-    frontier = [start]
+    dr, dc = directions[len(directions) // 2]
 
-    for _ in range(max_radius):
-        next_frontier = []
-        for r, c in frontier:
-            for dr, dc in _ALL_8_DIRECTIONS:
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < n_rows and 0 <= nc < n_cols and (nr, nc) not in visited:
-                    visited.add((nr, nc))
-                    next_frontier.append((nr, nc))
-
-        if not next_frontier:
+    for step in range(1, max_radius + 1):
+        nr, nc = r0 + step * dr, c0 + step * dc
+        if not (0 <= nr < n_rows and 0 <= nc < n_cols):
             break
+        if np.isfinite(data[nr, nc]):
+            return (nr, nc)
 
-        valid = [(r, c) for r, c in next_frontier if np.isfinite(data[r, c])]
-        if valid:
-            return min(valid, key=lambda rc: (rc[0] - r0) ** 2 + (rc[1] - c0) ** 2)
-
-        frontier = next_frontier
-
-    return start  # fallback: NaN region larger than max_radius
+    return start  # fallback: no finite pixel within max_radius steps
 
 
 def flood_fill(data, start, SPM_threshold, directions):
@@ -405,20 +389,22 @@ def find_high_value_pixels(data, center_lat, center_lon, radius_km, SPM_threshol
     return mask
 
 
-def make_the_plot(path_to_the_figure_file_to_save, 
-                  ds, 
-                  ds_reduced, 
-                  lon_range_of_plume_area, 
-                  lat_range_of_plume_area, 
-                  bathymetric_threshold, 
-                  bathymetry_data_aligned_to_reduced_map, 
+def make_the_plot(path_to_the_figure_file_to_save,
+                  ds,
+                  ds_reduced,
+                  lon_range_of_plume_area,
+                  lat_range_of_plume_area,
+                  bathymetric_threshold,
+                  bathymetry_data_aligned_to_reduced_map,
                   thresholds,
                   plot_the_plume_area,
                   coast_shape=None,
-                  mask_area=None, 
+                  mask_area=None,
                   close_river_mouth_area=None,
                   pixel_done=None,
-                  show_bathymetric_mask=False) : 
+                  show_bathymetric_mask=False,
+                  color_limits=None,
+                  starting_points=None) :
     
     """
    Generate and save a visualization comparing the original and processed datasets, including optional plume and bathymetric masks.
@@ -490,14 +476,13 @@ def make_the_plot(path_to_the_figure_file_to_save,
    ... )
    """
 
-    # Determine color bar limits based on the dataset and optional mask
-    if mask_area is not None : 
-        # Use the mask area to calculate the color bar range
-        
+    # Determine color bar limits: use global limits when provided, else per-day fallback
+    if color_limits is not None:
+        min_color_bar, max_color_bar = color_limits
+    elif mask_area is not None:
         max_color_bar = np.nanmax( [np.nanquantile(ds_reduced.values[np.where(mask_area.values)], 0.85), 1] )
         min_color_bar = np.nanmax( [np.nanmin(ds_reduced.values[np.where(mask_area.values)]), 0.1] )
-
-    else :
+    else:
         max_color_bar = np.max( [np.nanquantile(ds.values, 0.95), 1] )
         min_color_bar = np.max([np.nanmin(ds_reduced.values), 0.1])
 
@@ -572,9 +557,13 @@ def make_the_plot(path_to_the_figure_file_to_save,
         ax2.set_ylim(lat_plot_bounds)
         fig.suptitle(f'No plume detection ({os.path.basename(path_to_the_figure_file_to_save)})', fontsize=20)
         
+    if starting_points is not None:
+        for lat_sp, lon_sp in starting_points.values():
+            ax2.plot(lon_sp, lat_sp, 'k+', markersize=12, markeredgewidth=2, zorder=10)
+
     # Add a title to the second subplot with bathymetric and SPM threshold details
     ax2.set_title(f'Area with bathy > {bathymetric_threshold}m and SPM {"; ".join([f"> {round(value, 1)} ({key})" for key, value in thresholds.items() if value is not None])} g m-3')
-       
+
     # Adjust layout to prevent overlap
     plt.tight_layout()
 
@@ -1589,8 +1578,10 @@ def return_stats_dictionnary(final_mask_area, spm_reduced_map, spm_map, paramete
     # Calculate the number of pixels in the plume area
     n_pixel_in_the_plume_area = np.sum(final_mask_area) # Number of pixels in the plume area
     
-    # Calculate the area of one pixel in km²
-    area_of_one_pixel = (parameters['lon_new_resolution'] * 111.32 * np.cos(np.radians(np.mean(coordinate_range_bounds(parameters['lat_range_of_plume_area']))))) * (parameters['lat_new_resolution'] * 111.32) # Area of one pixel in km²
+    # Calculate the area of one pixel in km² from the actual grid spacing
+    _pixel_lat_deg = float(np.diff(spm_reduced_map.lat.values).mean())
+    _pixel_lon_deg = float(np.diff(spm_reduced_map.lon.values).mean())
+    area_of_one_pixel = (_pixel_lon_deg * 111.32 * np.cos(np.radians(np.mean(coordinate_range_bounds(parameters['lat_range_of_plume_area']))))) * (_pixel_lat_deg * 111.32)
     area_of_the_plume_mask = np.sum(final_mask_area) * area_of_one_pixel # Total plume area in km²
     
     # Compute mean and standard deviation of SPM in the plume area
@@ -1894,7 +1885,10 @@ def main_process(file_name,
                  dynamic_thresh,
                  coast_shape=None,
                  variable_name=None,
-                 precomputed_threshold=None):
+                 precomputed_threshold=None,
+                 color_limits=None,
+                 lat_new_resolution=None,
+                 lon_new_resolution=None):
     """
     Process a single satellite data file for plume detection.
 
@@ -1945,8 +1939,8 @@ def main_process(file_name,
         return None
 
     # Reduce the resolution of the dataset to the specified latitude and longitude resolutions
-    ds_reduced = (reduce_resolution(ds, parameters['lat_new_resolution'], parameters['lon_new_resolution'])
-                  if parameters['lat_new_resolution'] is not None
+    ds_reduced = (reduce_resolution(ds, lat_new_resolution, lon_new_resolution)
+                  if lat_new_resolution is not None
                   else ds)
 
     all_mask_area = []
@@ -1964,7 +1958,9 @@ def main_process(file_name,
                       bathy_data_aligned,
                       thresholds,
                       coast_shape=coast_shape,
-                      plot_the_plume_area=False)
+                      plot_the_plume_area=False,
+                      color_limits=color_limits,
+                      starting_points=parameters['starting_points'])
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
@@ -2003,7 +1999,9 @@ def main_process(file_name,
                       bathymetry_data_aligned_to_reduced_map=bathy_data_aligned,
                       thresholds=thresholds,
                       coast_shape=coast_shape,
-                      plot_the_plume_area=False)
+                      plot_the_plume_area=False,
+                      color_limits=color_limits,
+                      starting_points=parameters['starting_points'])
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
@@ -2031,7 +2029,9 @@ def main_process(file_name,
                   close_river_mouth_area=None,
                   pixel_done=None,
                   coast_shape=coast_shape,
-                  show_bathymetric_mask=True)
+                  show_bathymetric_mask=True,
+                  color_limits=color_limits,
+                  starting_points=parameters['starting_points'])
 
     # Cleanup to free memory
     del final_mask_area, all_mask_area
@@ -2101,8 +2101,10 @@ class Create_the_plume_mask :
         """
         Determine the SPM threshold for plume detection.
 
-        Priority: precomputed_threshold (from global quantile or user scalar) >
-        dynamic (gradient-based, per-day) > fixed (zone preset per-plume value).
+        Priority: dynamic (gradient-based, per-scene) > precomputed_threshold
+        (from global quantile or user scalar) > fixed (zone preset per-plume value).
+        The runner ensures precomputed_threshold=None when dynamic mode is active,
+        so this method uses whichever non-None value it receives.
         """
 
         if precomputed_threshold is not None:
@@ -2139,13 +2141,14 @@ class Create_the_plume_mask :
         data = self.spm_map.values
         start = self.parameters['pixel_starting_points'][self.plume_name]
 
-        valid_start = find_nearest_valid_start(data, start)
+        directions = self.parameters['searching_strategy_directions'][self.plume_name]
+        valid_start = find_nearest_valid_start(data, start, directions)
         if valid_start != start:
             lat_val = float(self.spm_map.lat[valid_start[0]])
             lon_val = float(self.spm_map.lon[valid_start[1]])
             print(
                 f"    '{self.plume_name}': configured start pixel {start} is NaN; "
-                f"relocated to nearest valid pixel {valid_start} "
+                f"relocated along principal fan direction to {valid_start} "
                 f"(lat={lat_val:.4f}, lon={lon_val:.4f}).",
                 flush=True,
             )

@@ -1,7 +1,7 @@
 {
+  "lon_new_resolution": 0.015,
+  "lat_new_resolution": 0.015,
   "parameters": {
-    "lon_new_resolution": 0.015,
-    "lat_new_resolution": 0.015,
     "searching_strategies": {
       "Var": "southward_fan",
       "Paillon": "southward_fan"
