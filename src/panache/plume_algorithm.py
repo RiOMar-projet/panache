@@ -42,27 +42,6 @@ multiprocess.set_start_method('spawn', force = True) # MacOS friendly multiproce
 # =============================================================================
 
 
-def write_stats_csv(output_stem, stats):
-
-    """
-    Write a single-row statistics dictionary to a CSV file.
-
-    Parameters
-    ----------
-    output_stem : str
-        Path prefix for the output file; the file is written to
-        ``f'{output_stem}_statistics.csv'``.
-    stats : dict
-        Dictionary of statistics for one processed file, as returned by
-        `return_stats_dictionnary`.
-
-    Returns
-    -------
-    None
-        The statistics are written to disk as a side effect.
-    """
-
-    pd.DataFrame([stats]).to_csv(f'{output_stem}_statistics.csv', index=False)
 
 
 
@@ -121,6 +100,53 @@ def reduce_resolution(ds, lat_bin_size_in_degree, lon_bin_size_in_degree):
     ds_reduced = ds.coarsen(lat=lat_factor, lon=lon_factor, boundary='trim').mean()
     
     return ds_reduced
+
+
+# Maximum BFS radius (in pixels) used when relocating a NaN start pixel.
+_NAN_START_SEARCH_RADIUS = 50
+
+# All 8 compass directions used for the isotropic BFS in find_nearest_valid_start.
+_ALL_8_DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+
+def find_nearest_valid_start(data, start, max_radius=_NAN_START_SEARCH_RADIUS):
+    """Find the nearest finite pixel to `start` using isotropic BFS.
+
+    If `start` itself is finite it is returned immediately.  Otherwise the
+    function expands outward in all 8 compass directions, ring by ring, until
+    it finds at least one finite (non-NaN) pixel.  Among all candidates in the
+    first valid ring, the one with the smallest Euclidean pixel distance to the
+    original `start` is returned.  If no finite pixel is found within
+    `max_radius` steps the original `start` is returned unchanged (preserving
+    the pre-existing empty-mask behaviour as a fallback).
+    """
+    r0, c0 = start
+    if np.isfinite(data[r0, c0]):
+        return start
+
+    n_rows, n_cols = data.shape
+    visited = {start}
+    frontier = [start]
+
+    for _ in range(max_radius):
+        next_frontier = []
+        for r, c in frontier:
+            for dr, dc in _ALL_8_DIRECTIONS:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < n_rows and 0 <= nc < n_cols and (nr, nc) not in visited:
+                    visited.add((nr, nc))
+                    next_frontier.append((nr, nc))
+
+        if not next_frontier:
+            break
+
+        valid = [(r, c) for r, c in next_frontier if np.isfinite(data[r, c])]
+        if valid:
+            return min(valid, key=lambda rc: (rc[0] - r0) ** 2 + (rc[1] - c0) ** 2)
+
+        frontier = next_frontier
+
+    return start  # fallback: NaN region larger than max_radius
 
 
 def flood_fill(data, start, SPM_threshold, directions):
@@ -1861,13 +1887,14 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
 def main_process(file_name,
                  parameters,
                  bathy_data_aligned,
-                 cloud_check_water_mask, 
+                 cloud_check_water_mask,
                  land_mask,
                  inside_polygon_mask,
                  output_stem,
                  dynamic_thresh,
                  coast_shape=None,
-                 variable_name=None):
+                 variable_name=None,
+                 precomputed_threshold=None):
     """
     Process a single satellite data file for plume detection.
 
@@ -1941,7 +1968,6 @@ def main_process(file_name,
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
-        write_stats_csv(output_stem, data_to_return)
 
         return data_to_return
 
@@ -1954,7 +1980,8 @@ def main_process(file_name,
                                                     parameters,
                                                     plume_name,
                                                     inside_polygon_mask,
-                                                    dynamic_thresh)
+                                                    dynamic_thresh,
+                                                    precomputed_threshold=precomputed_threshold)
         
         # print(f"Processed plume: {the_plume.plume_name}")
         # print(f"{len(the_plume.plume_mask.values[the_plume.plume_mask.values])} pixels detected in the plume area.", flush=True)
@@ -1980,7 +2007,6 @@ def main_process(file_name,
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
-        write_stats_csv(output_stem, data_to_return)
 
         del all_mask_area
         gc.collect()
@@ -1989,15 +2015,8 @@ def main_process(file_name,
 
     # Combine all detected plume areas using logical OR
     final_mask_area = reduce(np.logical_or, all_mask_area)
-    value_col = ds_reduced.name or "spm"
-    masked = ds_reduced.where(final_mask_area)
-    masked_df = masked.to_dataframe(name=value_col).reset_index()
-    masked_df = masked_df[masked_df[value_col].notnull()]
-    masked_df = masked_df.rename(columns={'date_for_plot': 'date'})
-    masked_df = masked_df[['date', 'lon', 'lat', value_col]]
-    masked_df.to_csv(f'{os.path.splitext(output_stem)[0]}_plume_mask.csv', index=False)
 
-    # Caluclate statistics
+    # Calculate statistics
     data_to_return = return_stats_dictionnary(final_mask_area, ds_reduced, ds, parameters, thresholds)
 
     # Plot the final map with the plume area
@@ -2013,7 +2032,6 @@ def main_process(file_name,
                   pixel_done=None,
                   coast_shape=coast_shape,
                   show_bathymetric_mask=True)
-    write_stats_csv(output_stem, data_to_return)
 
     # Cleanup to free memory
     del final_mask_area, all_mask_area
@@ -2078,50 +2096,65 @@ class Create_the_plume_mask :
         self.parameters["pixel_starting_points_close_river_mouth"] = {river_mouth : find_the_index_of_the_plume_starting_point(self.spm_map, coordinates) 
                                                                           for river_mouth, coordinates in self.parameters['river_mouth_to_exclude'].items()}
 
-    def determine_SPM_threshold(self, dynamic_determination_of_SPM_threshold) : 
-        
+    def determine_SPM_threshold(self, dynamic_determination_of_SPM_threshold, precomputed_threshold=None):
+
         """
         Determine the SPM threshold for plume detection.
 
-        Parameters
-        ----------
-        manual_determination_of_SPM_threshold : float, optional
-            User-specified SPM threshold. If False, the threshold is determined automatically.
+        Priority: precomputed_threshold (from global quantile or user scalar) >
+        dynamic (gradient-based, per-day) > fixed (zone preset per-plume value).
         """
-        
-        if dynamic_determination_of_SPM_threshold : 
-            SPM_threshold, points_used_for_finding_SPM_threshold, all_points_tested = find_SPM_threshold(spm_map = self.spm_map, 
+
+        if precomputed_threshold is not None:
+            SPM_threshold = precomputed_threshold
+
+        elif dynamic_determination_of_SPM_threshold:
+            SPM_threshold, points_used_for_finding_SPM_threshold, all_points_tested = find_SPM_threshold(spm_map = self.spm_map,
                                                 land_mask = self.land_mask,
-                                                start_point = self.parameters['pixel_starting_points'][self.plume_name], 
+                                                start_point = self.parameters['pixel_starting_points'][self.plume_name],
                                                 directions = self.parameters['searching_strategy_directions'][self.plume_name],
                                                 max_steps = self.parameters['max_steps_for_the_directions'][self.plume_name],
                                                 maximal_threshold = self.parameters['maximal_threshold'][self.plume_name],
                                                 minimal_threshold = self.parameters['minimal_threshold'][self.plume_name],
                                                 quantile_to_use = self.parameters['quantile_to_use'][self.plume_name])
             self.points_used_for_finding_SPM_threshold = points_used_for_finding_SPM_threshold
-            
+
             all_points_tested = all_points_tested.reshape(-1,2)
             all_points_tested = all_points_tested[~np.isnan(all_points_tested).any(axis=1)]
             self.all_points_tested_for_finding_SPM_threshold = all_points_tested
-            
-        else : 
+
+        else:
             SPM_threshold = self.parameters['fixed_threshold'][self.plume_name]
-                
+
         self.SPM_threshold = SPM_threshold
         self.protocol.append(f'{len(self.protocol)} : determine_SPM_threshold')
                 
         
-    def do_a_raw_plume_detection(self) : 
-        
+    def do_a_raw_plume_detection(self) :
+
         """
         Perform the initial detection of the plume area.
         """
-        
-        mask, pixel_done = flood_fill(data = self.spm_map.values, 
-                                      start = self.parameters['pixel_starting_points'][self.plume_name],
-                                      SPM_threshold = self.SPM_threshold,
-                                      directions = self.parameters['searching_strategy_directions'][self.plume_name])  
-        
+
+        data = self.spm_map.values
+        start = self.parameters['pixel_starting_points'][self.plume_name]
+
+        valid_start = find_nearest_valid_start(data, start)
+        if valid_start != start:
+            lat_val = float(self.spm_map.lat[valid_start[0]])
+            lon_val = float(self.spm_map.lon[valid_start[1]])
+            print(
+                f"    '{self.plume_name}': configured start pixel {start} is NaN; "
+                f"relocated to nearest valid pixel {valid_start} "
+                f"(lat={lat_val:.4f}, lon={lon_val:.4f}).",
+                flush=True,
+            )
+
+        mask, pixel_done = flood_fill(data=data,
+                                      start=valid_start,
+                                      SPM_threshold=self.SPM_threshold,
+                                      directions=self.parameters['searching_strategy_directions'][self.plume_name])
+
         self.plume_mask = xr.DataArray(mask, coords=self.spm_map.coords, dims=self.spm_map.dims)
         self.protocol.append(f'{len(self.protocol)} : do_a_raw_plume_detection')
         
@@ -2471,7 +2504,8 @@ def Pipeline_to_delineate_the_plume(ds_reduced,
                                     parameters,
                                     plume_name,
                                     inside_polygon_mask,
-                                    dynamic_thresh):
+                                    dynamic_thresh,
+                                    precomputed_threshold=None):
 
     """
     Run the full `Create_the_plume_mask` refinement sequence for one plume.
@@ -2513,7 +2547,7 @@ def Pipeline_to_delineate_the_plume(ds_reduced,
                                       parameters,
                                       plume_name)
 
-    the_plume.determine_SPM_threshold(dynamic_thresh)
+    the_plume.determine_SPM_threshold(dynamic_thresh, precomputed_threshold=precomputed_threshold)
     the_plume.do_a_raw_plume_detection()
     the_plume.include_cloudy_regions_to_plume_area()
     the_plume.remove_the_areas_with_sediment_resuspension(

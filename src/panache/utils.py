@@ -290,9 +290,9 @@ def define_parameters(Zone) :
             'Sevre': 'westward_fan',
         }
         bathymetric_threshold = 0
-        starting_points = {'Gironde' : (45.59, -1.05),
-                          'Charente' : (45.97, -1.11),
-                          'Sevre' : (46.27, -1.16)}
+        starting_points = {'Gironde' : (45.60, -1.10),
+                           'Charente' : (45.945, -1.11),
+                           'Sevre' : (46.27, -1.17)}
         core_of_the_plumes = {'Gironde' : (45.59, -1.05),
                               'Charente' : (45.98, -1.17),
                               'Sevre' : (46.24, -1.24)}

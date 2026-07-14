@@ -43,6 +43,8 @@ class RunConfig:
     variable_name: str | None = None
     zone: str | None = None
     parameters: dict | None = None
+    spm_threshold: float | None = None
+    global_threshold_quantile: float | None = None
 
 
 def _required_bool(data: dict, key: str) -> bool:
@@ -96,6 +98,13 @@ def load_run_config(config_path: str | Path) -> RunConfig:
     if parameters is None:
         raise ValueError(f"Unknown zone preset: {zone}")
 
+    raw_spm_threshold = data.get("spm_threshold")
+    raw_quantile = data.get("global_threshold_quantile")
+    if raw_spm_threshold is not None and raw_quantile is not None:
+        raise ValueError("Use either 'spm_threshold' or 'global_threshold_quantile', not both.")
+    if raw_quantile is not None and not (0.0 < raw_quantile < 1.0):
+        raise ValueError("'global_threshold_quantile' must be a float strictly between 0 and 1.")
+
     return RunConfig(
         input_path=data["input_path"],
         bathymetry_path=Path(data["bathymetry_path"]),
@@ -109,4 +118,6 @@ def load_run_config(config_path: str | Path) -> RunConfig:
         variable_name=data.get("variable_name"),
         zone=zone,
         parameters=parameters,
+        spm_threshold=float(raw_spm_threshold) if raw_spm_threshold is not None else None,
+        global_threshold_quantile=float(raw_quantile) if raw_quantile is not None else None,
     )

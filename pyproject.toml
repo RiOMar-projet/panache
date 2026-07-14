@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panache-riomar"
-version = "0.2.1"
+version = "0.3.0"
 description = "River plume detection on gridded data"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -34,6 +34,7 @@ dependencies = [
   "multiprocess",
   "numpy",
   "pandas",
+  "psutil",
   "scikit-image",
   "scipy",
   "shapely",

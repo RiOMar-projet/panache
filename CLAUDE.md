@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project does
 
-`panache` is a Python package for detecting river plumes in gridded geophysical satellite data (primarily suspended particulate matter, SPM, in NetCDF format). It takes NetCDF inputs, a bathymetry mask, and a JSON config to produce plume masks, per-timestep PNG maps, CSV statistics, and an optional animated GIF.
+`panache` is a Python package for detecting river plumes in gridded geophysical satellite data (primarily suspended particulate matter, SPM, in NetCDF format). It takes NetCDF inputs, a bathymetry mask, and a JSON config to produce per-timestep PNG maps, a `Results.csv` summary, an optional manifest, and an optional animated GIF.
 
 ## Installation
 
@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -e .
 ```
 
-Requires Python 3.10+. Key dependencies: `xarray`, `numpy`, `pandas`, `geopandas`, `scipy`, `scikit-image`, `matplotlib`, `imageio`, `multiprocess`, `bathyreq`.
+Requires Python 3.10+. Key dependencies: `xarray`, `numpy`, `pandas`, `geopandas`, `scipy`, `scikit-image`, `matplotlib`, `imageio`, `multiprocess`, `bathyreq`, `psutil`.
 
 ## Running
 
@@ -78,8 +78,8 @@ src/panache/
 
 1. `load_run_config` parses JSON → `RunConfig`. A config must specify either `zone` (resolved via `define_parameters` in `utils.py`) or explicit `parameters`. Both paths produce the same parameter dict structure.
 2. `run_batch` discovers input `.nc` files (glob, single file, or directory recursion), loads the first valid file to derive grid geometry, aligns bathymetry to that grid, and builds shared masks.
-3. Each file is dispatched to `main_process` in `plume_algorithm.py`, either sequentially or via `multiprocess.Pool`. `main_process` writes `*_statistics.csv`, `*_plume_mask.csv`, and `*_plume_mask.png` per file.
-4. After all files are processed, `_load_statistics` collects all `*_statistics.csv` files and writes `Results.csv`.
+3. Each file is dispatched to `main_process` in `plume_algorithm.py`, either sequentially or via `multiprocess.Pool`. `main_process` writes a `*_plume_mask.png` per file and returns a stats dict in memory.
+4. After all files are processed, `run_batch` assembles all returned dicts and writes a single `Results.csv`. A `manifest.csv` listing each input file and its processing status is also written.
 
 ### Config modes
 
@@ -102,12 +102,19 @@ Stored as a pickled `xr.DataArray`. If the pickle does not exist at the configur
 
 ```
 <output_dir>/
-├── Results.csv
-├── GIF.gif              (optional)
+├── Results.csv          — one row per input file, assembled in memory at run end
+├── manifest.csv         — input_file + status for every file seen in this run
+├── GIF.gif              (optional, when gif: true)
 └── MAPS/
-    ├── <stem>_plume_mask.png
-    ├── <stem>_plume_mask.csv
-    └── <stem>_statistics.csv
+    └── <stem>.png       — per-timestep comparison map
 ```
 
-`overwrite: false` skips files whose `*_statistics.csv` already exists. `Results.csv` is always rebuilt from all `*_statistics.csv` files found under `MAPS/`.
+`overwrite: false` skips any file whose `<stem>.png` already exists or whose path appears in `manifest.csv` from a prior run. On resume, prior rows in `Results.csv` are merged with new rows by date to produce the final output.
+
+### Threshold resolution order
+
+For each run, the SPM threshold is resolved in this priority order:
+
+1. `spm_threshold` (float in config) — user-supplied scalar, applied to all river mouths; fastest path, no data pre-loading.
+2. `global_threshold_quantile` (float 0–1 in config) — computed from the full dataset before any daily processing. Recommended scientific approach; see Gangloff et al. (2017, doi:10.1016/j.csr.2017.06.024). Use 0.95 for the ambient background boundary.
+3. Per-plume `fixed_threshold` values in the zone preset or `parameters` block — legacy fallback.

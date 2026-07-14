@@ -4,8 +4,15 @@ import glob
 from pathlib import Path
 
 import imageio.v2 as imageio
+import numpy as np
 import pandas as pd
 import xarray as xr
+
+try:
+    import psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _HAS_PSUTIL = False
 
 try:
     import geopandas as gpd
@@ -66,30 +73,12 @@ def _resolve_output_stem(input_file: Path, output_dir: Path, input_base: Path) -
     return output_dir / "MAPS" / relative.with_suffix("")
 
 
-def _statistics_path(output_stem: Path) -> Path:
-    return Path(f"{output_stem}_statistics.csv")
-
-
 def _output_exists(output_stem: Path) -> bool:
-    return _statistics_path(output_stem).exists()
-
-
-def _load_statistics(output_dir: Path) -> pd.DataFrame:
-    statistics_files = sorted((output_dir / "MAPS").rglob("*_statistics.csv"))
-    if not statistics_files:
-        return pd.DataFrame()
-
-    statistics = pd.concat(
-        (pd.read_csv(statistics_file) for statistics_file in statistics_files),
-        ignore_index=True,
-    )
-    if "date" in statistics:
-        statistics = statistics.sort_values("date").reset_index(drop=True)
-    return statistics
+    return Path(f"{output_stem}.png").exists()
 
 
 def _skip_existing_output_message(input_file: str | Path) -> str:
-    return f"Skipping {Path(input_file).name}: output already exists."
+    return f"Skipping {Path(input_file).name}: output PNG already exists."
 
 
 def _skip_empty_file_message(input_file: str | Path) -> str:
@@ -129,9 +118,103 @@ def _load_boundary(boundary_path: Path | None):
     return gpd.read_file(boundary_path)
 
 
+def compute_global_threshold(
+    input_files: list[Path],
+    parameters: dict,
+    variable_name: str | None,
+    quantile: float,
+    sample_ds: xr.DataArray,
+) -> float:
+    """Compute a single SPM quantile threshold from the full input dataset.
+
+    Loads every file in the bbox crop, concatenates all finite values, and
+    returns ``np.nanquantile(all_values, quantile)``.  Before loading, prints
+    an estimate of the RAM required and, when psutil is available, checks that
+    sufficient memory is free.
+    """
+    n = len(input_files)
+    n_pixels = sample_ds.size
+    bytes_needed = n * n_pixels * 8  # float64 worst case
+    gb_needed = bytes_needed / 1e9
+
+    print(f"\nComputing global SPM threshold ({quantile:.0%}-ile) from {n} files.")
+    print(f"  Estimated peak RAM required: {gb_needed:.2f} GB", flush=True)
+
+    if _HAS_PSUTIL:
+        available_gb = psutil.virtual_memory().available / 1e9
+        print(f"  Available RAM:              {available_gb:.2f} GB", flush=True)
+        if bytes_needed > psutil.virtual_memory().available:
+            raise MemoryError(
+                f"Insufficient RAM to compute global threshold: need ~{gb_needed:.1f} GB "
+                f"but only {available_gb:.1f} GB is available. "
+                f"Set 'spm_threshold' in your config to provide a fixed value and skip "
+                f"pre-computation."
+            )
+    else:
+        print(
+            "  (Install psutil to enable automatic RAM availability check.)",
+            flush=True,
+        )
+
+    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
+    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
+    n_digits = len(str(n))
+    all_values: list[np.ndarray] = []
+
+    for i, path in enumerate(input_files, 1):
+        print(
+            f"\r  Loading [{i:{n_digits}d}/{n}] ({100 * i // n:3d}%)  {path.name:<50}",
+            end="",
+            flush=True,
+        )
+        try:
+            da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
+            all_values.append(da.values.ravel())
+        except NoValidMapDataError:
+            continue
+        except Exception as exc:
+            print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
+            continue
+
+    print(flush=True)  # newline after progress line
+
+    if not all_values:
+        raise ValueError(
+            "No valid data found across all input files — cannot compute global threshold."
+        )
+
+    combined = np.concatenate(all_values)
+    threshold = float(np.nanquantile(combined, quantile))
+    print(f"  Global SPM threshold ({quantile:.0%}-ile): {threshold:.4f}\n", flush=True)
+    return threshold
+
+
+def _read_manifest(output_dir: Path) -> set[str]:
+    """Return the set of input_file paths recorded in the manifest from a prior run."""
+    manifest_path = output_dir / "manifest.csv"
+    if not manifest_path.exists():
+        return set()
+    try:
+        df = pd.read_csv(manifest_path)
+        if "input_file" in df.columns:
+            return set(df["input_file"].dropna().astype(str))
+    except Exception:
+        pass
+    return set()
+
+
+def _write_manifest(output_dir: Path, records: list[dict]) -> None:
+    manifest_path = output_dir / "manifest.csv"
+    pd.DataFrame(records).to_csv(manifest_path, index=False)
+
+
 def _run_task(task):
     input_file = task[0]
-    result = main_process(*task)
+    try:
+        result = main_process(*task)
+    except Exception as exc:
+        print(f"\nError processing {Path(input_file).name}: {exc}", flush=True)
+        result = None
     return input_file, result
 
 
@@ -164,14 +247,48 @@ def run_batch(config: RunConfig) -> Path:
         parameters,
     )
 
+    # --- Resolve SPM threshold ---
+    # Priority: spm_threshold (user-supplied scalar) > global_threshold_quantile
+    # (computed from data) > fixed_threshold in parameters (per-plume preset values).
+    precomputed_threshold: float | None = None
+
+    if config.spm_threshold is not None:
+        precomputed_threshold = config.spm_threshold
+        print(f"Using user-supplied SPM threshold: {precomputed_threshold}")
+
+    elif config.global_threshold_quantile is not None:
+        try:
+            precomputed_threshold = compute_global_threshold(
+                input_files,
+                parameters,
+                config.variable_name,
+                config.global_threshold_quantile,
+                ds,
+            )
+        except MemoryError as exc:
+            raise SystemExit(f"[panache] {exc}") from exc
+        except ValueError as exc:
+            raise SystemExit(f"[panache] {exc}") from exc
+
+    # --- Build task list, honouring overwrite=False via manifest + PNG check ---
+    prior_processed = _read_manifest(output_dir) if not config.overwrite else set()
+
     print("Project structure complete. Starting batch processing...")
     print(f"Running batch with {config.nb_cores} cores...")
 
     tasks = []
+    skipped_from_manifest: list[str] = []
+
     for input_file in input_files:
         output_stem = _resolve_output_stem(input_file, output_dir, input_base)
-        if not config.overwrite and _output_exists(output_stem):
+
+        already_done = (
+            str(input_file) in prior_processed
+            or (not config.overwrite and _output_exists(output_stem))
+        )
+        if already_done:
             print(_skip_existing_output_message(input_file), flush=True)
+            skipped_from_manifest.append(str(input_file))
             continue
 
         tasks.append(
@@ -186,42 +303,72 @@ def run_batch(config: RunConfig) -> Path:
                 config.dynamic_threshold,
                 coast_boundary,
                 config.variable_name,
+                precomputed_threshold,
             )
         )
 
-    if config.nb_cores > 1:
-        total = len(tasks)
+    # --- Run tasks ---
+    new_stats: list[dict] = []
+    total = len(tasks)
 
+    if config.nb_cores > 1:
         with multiprocess.Pool(config.nb_cores) as pool:
-            for completed, (input_file, result) in enumerate(pool.imap_unordered(_run_task, tasks), 1):
+            for completed, (input_file, result) in enumerate(
+                pool.imap_unordered(_run_task, tasks), 1
+            ):
                 status = "Skipped" if result is None else "Completed"
                 print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
+                if result is not None:
+                    new_stats.append(result)
     else:
-        total = len(tasks)
-
         for completed, task in enumerate(tasks, 1):
             input_file, result = _run_task(task)
             status = "Skipped" if result is None else "Completed"
             print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
+            if result is not None:
+                new_stats.append(result)
 
+    # --- Assemble Results.csv ---
+    # When overwrite=False we merge new results with any rows already in Results.csv
+    # from a prior run, avoiding duplicates by date.
     print("Batch processing complete. Saving results...")
 
-    statistics = _load_statistics(output_dir)
     results_path = output_dir / "Results.csv"
-    statistics.to_csv(results_path, index=False)
+    new_df = pd.DataFrame(new_stats)
 
+    if not config.overwrite and results_path.exists() and not new_df.empty:
+        try:
+            old_df = pd.read_csv(results_path)
+            if "date" in new_df.columns and "date" in old_df.columns:
+                old_df = old_df[~old_df["date"].isin(new_df["date"])]
+            new_df = pd.concat([old_df, new_df], ignore_index=True)
+        except Exception as exc:
+            print(f"  Warning: could not merge existing Results.csv: {exc}", flush=True)
+
+    if "date" in new_df.columns:
+        new_df = new_df.sort_values("date").reset_index(drop=True)
+
+    new_df.to_csv(results_path, index=False)
     print(f"{results_path}")
 
+    # --- Write manifest ---
+    manifest_records = [
+        {"input_file": str(f), "status": "skipped_existing"}
+        for f in skipped_from_manifest
+    ] + [
+        {"input_file": task[0], "status": "processed"}
+        for task in tasks
+    ]
+    _write_manifest(output_dir, manifest_records)
+
+    # --- Optional GIF ---
     if config.gif:
         saved_maps = sorted((output_dir / "MAPS").rglob("*.png"))
         if saved_maps:
-
             print("GIF processing started. Multiple years of data may take a long time to process.")
-
             with imageio.get_writer(output_dir / "GIF.gif", mode="I", fps=1) as writer:
                 for figure_file in saved_maps:
                     writer.append_data(imageio.imread(figure_file))
-
             print("GIF processing complete.")
 
     return "All processes complete."
