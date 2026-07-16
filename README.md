@@ -1,6 +1,6 @@
 # panache 🌊
 
-[![codecov](https://codecov.io/gh/RiOMar-projet/panache/graph/badge.svg?token=I54RR0P060)](https://codecov.io/gh/RiOMar-projet/panache)
+[![codecov](https://codecov.io/gh/RiOMar-projet/panache/graph/badge.svg?token=I54RR0P060)](https://codecov.io/gh/RiOMar-projet/panache) 
 
 **`panache`** is a standalone Python module for detecting river plumes in gridded geophysical data.
 
