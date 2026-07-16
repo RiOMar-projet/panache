@@ -23,6 +23,7 @@ from panache.runner import (
     _skip_existing_output_message,
     _write_manifest,
     compute_global_colour_limits,
+    compute_global_threshold,
 )
 
 
@@ -317,6 +318,89 @@ class ReadManifestCorruptFileTests(unittest.TestCase):
             manifest.write_bytes(b"\x00\x01\x02\x03\xFF\xFE binary junk")
             result = _read_manifest(d)
         self.assertEqual(result, set())
+
+
+# ---------------------------------------------------------------------------
+# compute_global_threshold — lines 174-178, 183
+# exception branches: NoValidMapDataError skipped, generic Exception skipped,
+# and ValueError raised when all files fail
+# ---------------------------------------------------------------------------
+
+class ComputeGlobalThresholdExceptionTests(unittest.TestCase):
+
+    _PARAMS = {
+        "lat_range_of_plume_area": [0.0, 1.0],
+        "lon_range_of_plume_area": [0.0, 1.0],
+    }
+
+    def _sample_ds(self):
+        lat = np.linspace(0.0, 1.0, 5)
+        lon = np.linspace(0.0, 1.0, 5)
+        return xr.DataArray(np.ones((5, 5)), dims=["lat", "lon"],
+                            coords={"lat": lat, "lon": lon})
+
+    def test_no_valid_map_data_error_is_skipped_and_second_file_succeeds(self):
+        """NoValidMapDataError on first file → continue (lines 174-175); second succeeds."""
+        from panache.io import NoValidMapDataError
+        from unittest.mock import patch
+        import panache.runner as runner_mod
+
+        good = self._sample_ds()
+        calls = [0]
+
+        def _side(*a, **kw):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise NoValidMapDataError("all NaN")
+            return good
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            p1 = d / "a.nc"; p1.touch()
+            p2 = d / "b.nc"; p2.touch()
+            with patch.object(runner_mod, "load_map_data", side_effect=_side):
+                threshold, _ = compute_global_threshold(
+                    [p1, p2], self._PARAMS, None, 0.95, self._sample_ds()
+                )
+        self.assertIsInstance(threshold, float)
+
+    def test_generic_exception_is_skipped_and_second_file_succeeds(self):
+        """Generic Exception on first file → warning + continue (lines 176-178)."""
+        from unittest.mock import patch
+        import panache.runner as runner_mod
+
+        good = self._sample_ds()
+        calls = [0]
+
+        def _side(*a, **kw):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise OSError("disk error")
+            return good
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            p1 = d / "a.nc"; p1.touch()
+            p2 = d / "b.nc"; p2.touch()
+            with patch.object(runner_mod, "load_map_data", side_effect=_side):
+                threshold, _ = compute_global_threshold(
+                    [p1, p2], self._PARAMS, None, 0.95, self._sample_ds()
+                )
+        self.assertIsInstance(threshold, float)
+
+    def test_all_files_failing_raises_value_error(self):
+        """All files raise → ValueError (line 183)."""
+        from unittest.mock import patch
+        import panache.runner as runner_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            p1 = d / "a.nc"; p1.touch()
+            with patch.object(runner_mod, "load_map_data", side_effect=OSError("bad")):
+                with self.assertRaises(ValueError):
+                    compute_global_threshold(
+                        [p1], self._PARAMS, None, 0.95, self._sample_ds()
+                    )
 
 
 if __name__ == "__main__":

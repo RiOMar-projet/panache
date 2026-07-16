@@ -26,8 +26,10 @@ from panache.plume_algorithm import (
     find_high_value_pixels,
     find_SPM_threshold,
     first_true_block,
+    identify_the_shape_label_corresponding_to_the_plume,
     last_true_block,
     load_and_filter_arrays,
+    merge_plume_shape_with_close_shapes,
     pixels_far_from_land,
     reduce_resolution,
     set_mask_area_values_to_False_based_on_an_index_object,
@@ -528,6 +530,53 @@ class CreatePolygonMaskTests(unittest.TestCase):
         }
         result = create_polygon_mask(ds, params)
         self.assertEqual(result.shape, (n, n))
+
+
+# ---------------------------------------------------------------------------
+# identify_the_shape_label_corresponding_to_the_plume — lines 630-636
+# centroid-distance fallback when core pixel maps to background (label 0)
+# ---------------------------------------------------------------------------
+
+class IdentifyShapeLabelCentroidTests(unittest.TestCase):
+
+    def test_core_in_background_triggers_centroid_fallback(self):
+        n = 10
+        lat = np.linspace(0.0, 1.0, n)
+        lon = np.linspace(0.0, 1.0, n)
+        mask_vals = np.zeros((n, n), dtype=bool)
+        mask_vals[2:5, 2:5] = True  # one blob, rows 2-4 cols 2-4
+        mask = xr.DataArray(mask_vals, dims=["lat", "lon"],
+                            coords={"lat": lat, "lon": lon})
+        # Core at far corner — background pixel → label=0 → centroid path fires
+        core = (lat[8], lon[8])
+        label_val, labeled_arr, num_feat = identify_the_shape_label_corresponding_to_the_plume(mask, core)
+        self.assertEqual(num_feat, 1)
+        self.assertEqual(label_val, 1)
+
+
+# ---------------------------------------------------------------------------
+# merge_plume_shape_with_close_shapes — lines 717-721
+# branch fires when dilation of main blob bridges a second nearby blob
+# ---------------------------------------------------------------------------
+
+class MergePlumeShapeWithCloseShapesTests(unittest.TestCase):
+
+    def test_dilation_bridges_two_blobs_expands_mask(self):
+        n = 15
+        lat = np.linspace(0.0, 1.0, n)
+        lon = np.linspace(0.0, 1.0, n)
+        mask_vals = np.zeros((n, n), dtype=bool)
+        mask_vals[2:5, 5:8] = True   # blob A
+        mask_vals[6:9, 5:8] = True   # blob B — 1 pixel gap below blob A
+        mask = xr.DataArray(mask_vals, dims=["lat", "lon"],
+                            coords={"lat": lat, "lon": lon})
+        land = xr.DataArray(np.zeros((n, n), dtype=bool), dims=["lat", "lon"],
+                            coords={"lat": lat, "lon": lon})
+        core = (lat[3], lon[6])  # inside blob A
+        struct = np.ones((3, 3), dtype=bool)
+        before = int(mask.values.sum())
+        result = merge_plume_shape_with_close_shapes(mask, core, land, struct)
+        self.assertGreater(int(result.values.sum()), before)
 
 
 if __name__ == "__main__":
