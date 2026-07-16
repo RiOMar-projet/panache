@@ -273,8 +273,10 @@ def define_parameters(Zone) :
         maximal_bathymetric_for_zone_with_resuspension = {'Seine' : 30}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Seine' : 30}
         max_steps_for_the_directions = {'Seine' : 40}
-        maximal_threshold = {'Seine' : 11} # 15
-        minimal_threshold = {'Seine' : 7} # 4
+        # maximal_threshold = {'Seine' : 11} # 15  (static value, now auto-estimated)
+        # minimal_threshold = {'Seine' : 7} # 4   (static value, now auto-estimated)
+        maximal_threshold = {'Seine' : None}
+        minimal_threshold = {'Seine' : None}
         quantile_to_use = {'Seine' : 0.10}
         fixed_threshold = {'Seine' : 9.5}
         river_mouth_to_exclude = {'Canal de Caen à la mer' : [49.296, -0.245]}
@@ -298,8 +300,10 @@ def define_parameters(Zone) :
         maximal_bathymetric_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
         max_steps_for_the_directions = {'Gironde' : 100, 'Charente' : 50, 'Sevre' : 50}
-        maximal_threshold = {'Gironde' : 8, 'Charente' : 10, 'Sevre' : 8} 
-        minimal_threshold = {'Gironde' : 4, 'Charente' : 6, 'Sevre' : 4} 
+        # maximal_threshold = {'Gironde' : 8, 'Charente' : 10, 'Sevre' : 8}  (static values, now auto-estimated)
+        # minimal_threshold = {'Gironde' : 4, 'Charente' : 6, 'Sevre' : 4}  (static values, now auto-estimated)
+        maximal_threshold = {'Gironde' : None, 'Charente' : None, 'Sevre' : None}
+        minimal_threshold = {'Gironde' : None, 'Charente' : None, 'Sevre' : None}
         quantile_to_use = {'Gironde' : 0.2, 'Charente' : 0.2, 'Sevre' : 0.2} 
         fixed_threshold = {'Gironde' : 4.7, 'Charente' : 7.8, 'Sevre' : 5.2} 
         river_mouth_to_exclude = {}
@@ -309,19 +313,21 @@ def define_parameters(Zone) :
             'Grand Rhone': 'southward_fan',
             'Petit Rhone': 'southward_fan',
         }
-        bathymetric_threshold = 20
-        starting_points = {'Grand Rhone' : (43.30, 4.83),
-                           'Petit Rhone' : (43.47, 4.39)}
-        core_of_the_plumes = {'Grand Rhone' : (43.32, 4.85),
+        bathymetric_threshold = 10
+        starting_points = {'Grand Rhone' : (43.32, 4.85),
+                           'Petit Rhone' : (43.45, 4.39)}
+        core_of_the_plumes = {'Grand Rhone' : (43.30, 4.85),
                               'Petit Rhone' : (43.43, 4.39)}
-        lat_range_of_plume_area = [41, 44]
+        lat_range_of_plume_area = [42, 43.7]
         lon_range_of_plume_area = [3, 6]
         threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Grand Rhone' : 30, 'Petit Rhone' : 30}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Grand Rhone' : 30, 'Petit Rhone' : 30}
         max_steps_for_the_directions = {'Grand Rhone' : 50, 'Petit Rhone' : 35}
-        maximal_threshold = {'Grand Rhone' : 3, 'Petit Rhone' : 3} # 3
-        minimal_threshold = {'Grand Rhone' : 0.75, 'Petit Rhone' : 1} # 0.75
+        # maximal_threshold = {'Grand Rhone' : 3, 'Petit Rhone' : 3}    # 3    (static values, now auto-estimated)
+        # minimal_threshold = {'Grand Rhone' : 0.75, 'Petit Rhone' : 1} # 0.75 (static values, now auto-estimated)
+        maximal_threshold = {'Grand Rhone' : None, 'Petit Rhone' : None}
+        minimal_threshold = {'Grand Rhone' : None, 'Petit Rhone' : None}
         quantile_to_use = {'Grand Rhone' : 0.2, 'Petit Rhone' : 0.2}
         fixed_threshold = {'Grand Rhone' : 2.1, 'Petit Rhone' : 2.1} 
         river_mouth_to_exclude = {}
@@ -332,8 +338,8 @@ def define_parameters(Zone) :
             'Vilaine': 'westward_fan',
         }
         bathymetric_threshold = 0
-        starting_points = {'Loire' : (47.19, -2.20),
-                           'Vilaine' : (47.48, -2.56)}
+        starting_points = {'Loire' : (47.24, -2.20),
+                           'Vilaine' : (47.48, -2.55)}
         core_of_the_plumes = {'Loire' : (47.19, -2.36),
                               'Vilaine' : (47.47, -2.59)}
         lat_range_of_plume_area = [46.5, 48]
@@ -342,8 +348,10 @@ def define_parameters(Zone) :
         maximal_bathymetric_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         max_steps_for_the_directions = { 'Loire' : 100, 'Vilaine' : 50}
-        maximal_threshold = { 'Loire' : 8, 'Vilaine' : 8} # 12
-        minimal_threshold = { 'Loire' : 4, 'Vilaine' : 4} # 3
+        # maximal_threshold = { 'Loire' : 8, 'Vilaine' : 8} # 12 (static values, now auto-estimated)
+        # minimal_threshold = { 'Loire' : 4, 'Vilaine' : 4} # 3  (static values, now auto-estimated)
+        maximal_threshold = {'Loire' : None, 'Vilaine' : None}
+        minimal_threshold = {'Loire' : None, 'Vilaine' : None}
         quantile_to_use = { 'Loire' : 0.2, 'Vilaine' : 0.2}
         fixed_threshold = {'Loire' : 5.4, 'Vilaine' : 5.0} 
         river_mouth_to_exclude = {}

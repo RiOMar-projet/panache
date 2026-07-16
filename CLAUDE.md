@@ -94,6 +94,24 @@ src/panache/
 - `create_polygon_mask`: restricts detection to the `lat_range_of_plume_area` / `lon_range_of_plume_area` polygon defined in the parameters.
 - `remove_coastal_areas_with_sediment_resuspension`: removes shallow-water, near-estuary pixels likely driven by resuspension rather than plume signal.
 
+### `starting_points` vs `core_of_the_plumes`
+
+These parameters are distinct and serve different roles at different stages of the pipeline.
+
+**`starting_points`** is the algorithmic seed for each plume. It is the pixel where:
+1. `flood_fill` begins its BFS expansion.
+2. Directional gradient transects originate in `find_SPM_threshold` (dynamic threshold mode).
+3. Cross-sectional scanning begins in the plume-trimming steps (`remove_parts_of_the_plume_area_...`).
+
+The pixel must be a valid water pixel within or immediately adjacent to the high-SPM signal at the river mouth. If it falls on a NaN (cloud gap), `find_nearest_valid_start` relocates it to the nearest finite neighbour before flood fill begins.
+
+**`core_of_the_plumes`** is a trusted reference coordinate placed inside the expected plume body. It is used after the raw mask exists, for three distinct purposes:
+1. **Shape selection** (`identify_the_main_plume_shape_based_on_the_plume_core_location`): after flood fill, the mask may contain several disconnected blobs. The algorithm keeps only the connected component that contains or is nearest to the core coordinate.
+2. **Resuspension filter** (`remove_coastal_areas_with_sediment_resuspension`): Haversine distance from the core is computed for each pixel; shallow pixels beyond the `minimal_distance_from_estuary` threshold are candidates for removal.
+3. **Shape merging** (`dilate_the_main_plume_area_to_merge_close_plume_areas`): also calls shape-selection internally using the core to locate the right blob after dilation.
+
+The two coordinates are often near-identical, but they differ when the river mouth is very close to the coastline. In that case `starting_points` is placed right at the mouth (a coastal water pixel), while `core_of_the_plumes` is offset slightly offshore so that shape-selection reliably targets the correct blob. Example: `BAY_OF_SEINE` places the Seine starting point at the coast (0.145°E) and its core 0.15° offshore (0.0°E).
+
 ### Bathymetry
 
 Stored as a pickled `xr.DataArray`. If the pickle does not exist at the configured path, `bathyreq` is used to download it automatically and save it. The pickle must expose `lat` and `lon` coordinates.
@@ -115,6 +133,7 @@ Stored as a pickled `xr.DataArray`. If the pickle does not exist at the configur
 
 For each run, the SPM threshold is resolved in this priority order:
 
-1. `spm_threshold` (float in config) — user-supplied scalar, applied to all river mouths; fastest path, no data pre-loading.
-2. `global_threshold_quantile` (float 0–1 in config) — computed from the full dataset before any daily processing. Recommended scientific approach; see Gangloff et al. (2017, doi:10.1016/j.csr.2017.06.024). Use 0.95 for the ambient background boundary.
-3. Per-plume `fixed_threshold` values in the zone preset or `parameters` block — legacy fallback.
+1. **`dynamic_threshold: true`** — per-scene, per-plume gradient-based threshold computed by `find_SPM_threshold`. Overrides all other options; `precomputed_threshold` is always `None` on this path (enforced in `runner.py`).
+2. **`spm_threshold`** (float in config) — user-supplied scalar applied uniformly to all river mouths; fastest path, no data pre-loading. Only evaluated when `dynamic_threshold: false`.
+3. **`global_threshold_quantile`** (float 0–1 in config) — computed from the full dataset before daily processing begins. Only evaluated when `dynamic_threshold: false`. Recommended scientific approach; see Gangloff et al. (2017, doi:10.1016/j.csr.2017.06.024). Use 0.95 for the ambient background boundary. `spm_threshold` and `global_threshold_quantile` are mutually exclusive.
+4. **Per-plume `fixed_threshold`** values in the zone preset or `parameters` block — fallback when none of the above are set.

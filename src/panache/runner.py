@@ -30,6 +30,8 @@ from .utils import align_bathymetry_to_resolution, coordinate_range_bounds
 from .plume_algorithm import (
     create_polygon_mask,
     derive_masks_from_bathymetry,
+    estimate_threshold_bounds_from_near_mouth_pixels,
+    find_the_index_of_the_plume_starting_point,
     main_process,
     reduce_resolution,
 )
@@ -326,6 +328,39 @@ def run_batch(config: RunConfig) -> Path:
         bathymetry,
         parameters,
     )
+
+    # Inject run-level quantile settings so determine_SPM_threshold can read them
+    # via self.parameters without threading them through every function signature.
+    parameters['near_mouth_lower_quantile'] = config.near_mouth_lower_quantile
+    parameters['near_mouth_upper_quantile'] = config.near_mouth_upper_quantile
+
+    # --- Pre-compute near-mouth threshold bounds (once per batch) ---
+    # When dynamic_threshold is active and a plume's minimal/maximal_threshold is
+    # None, estimate it from the first valid scene so values are stable across the
+    # entire batch rather than re-derived per scene.
+    if config.dynamic_threshold:
+        lower_q = config.near_mouth_lower_quantile
+        upper_q = config.near_mouth_upper_quantile
+        print("\nEstimating near-mouth threshold bounds from first valid scene...", flush=True)
+        for plume_name, starting_point in parameters['starting_points'].items():
+            if (parameters['minimal_threshold'][plume_name] is None or
+                    parameters['maximal_threshold'][plume_name] is None):
+                pixel_start = find_the_index_of_the_plume_starting_point(ds_reduced, starting_point)
+                minimal, maximal = estimate_threshold_bounds_from_near_mouth_pixels(
+                    ds_reduced.values,
+                    land_mask.values,
+                    pixel_start,
+                    lower_quantile=lower_q,
+                    upper_quantile=upper_q,
+                )
+                parameters['minimal_threshold'][plume_name] = minimal
+                parameters['maximal_threshold'][plume_name] = maximal
+                print(
+                    f"  '{plume_name}': "
+                    f"p{lower_q*100:.0f}={minimal:.2f}, p{upper_q*100:.0f}={maximal:.2f} g m⁻³",
+                    flush=True,
+                )
+        print(flush=True)
 
     # --- Resolve SPM threshold ---
     # Priority: dynamic_threshold (per-scene gradient) > spm_threshold /

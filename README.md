@@ -133,6 +133,16 @@ To see a full example of the rquired arguments, see the example JSON file [here]
 
 Use `lat_range_of_plume_area` and `lon_range_of_plume_area` to define the plume domain used for input subsetting, cloud checks, map extents, and plume masking. Each can be a two-value min/max range, or matching polygon-coordinate lists for polygon plume domains.
 
+### `starting_points` and `core_of_the_plumes`
+
+These two parameters are placed near the same location but serve distinct roles at different stages of the algorithm.
+
+`starting_points` is the **algorithmic seed** for each plume: the pixel where the flood-fill BFS begins and from which all directional gradient transects originate when computing the dynamic threshold. It must be a water pixel situated within or immediately adjacent to the high-SPM signal at the river mouth, so that the flood fill propagates into the plume body rather than into the open ocean.
+
+`core_of_the_plumes` is a **trusted reference coordinate inside the plume body**, used after the raw mask has been created. It serves three purposes: (1) identifying which connected blob in the flood-fill result belongs to the river plume, (2) acting as the estuary centre when computing distances for the resuspension-removal filter, and (3) locating the main shape during the dilation-and-merge step.
+
+In practice the two coordinates are often near-identical, but they may differ when the river mouth is very close to the coastline. In that case `starting_points` is placed right at the mouth (a coastal water pixel), while `core_of_the_plumes` is placed slightly further offshore, within the expected plume footprint, to ensure the shape-selection step reliably identifies the correct blob. See the `BAY_OF_SEINE` preset in `utils.py` for an example: the Seine starting point sits at the coast (0.145°E) while its core is offset 0.15° offshore (0.0°E).
+
 ## 🛰️ Input Expectations
 
 - NetCDF inputs should expose `lat` and `lon` coordinates

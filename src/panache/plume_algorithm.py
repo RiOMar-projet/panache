@@ -404,7 +404,8 @@ def make_the_plot(path_to_the_figure_file_to_save,
                   pixel_done=None,
                   show_bathymetric_mask=False,
                   color_limits=None,
-                  starting_points=None) :
+                  starting_points=None,
+                  core_of_the_plumes=None) :
     
     """
    Generate and save a visualization comparing the original and processed datasets, including optional plume and bathymetric masks.
@@ -557,9 +558,18 @@ def make_the_plot(path_to_the_figure_file_to_save,
         ax2.set_ylim(lat_plot_bounds)
         fig.suptitle(f'No plume detection ({os.path.basename(path_to_the_figure_file_to_save)})', fontsize=20)
         
+    if core_of_the_plumes is not None:
+        for lat_cp, lon_cp in core_of_the_plumes.values():
+            ax2.plot(lon_cp, lat_cp, 'x', color='grey', markersize=10, markeredgewidth=2, zorder=10)
+
     if starting_points is not None:
-        for lat_sp, lon_sp in starting_points.values():
+        for name, (lat_sp, lon_sp) in starting_points.items():
             ax2.plot(lon_sp, lat_sp, 'k+', markersize=12, markeredgewidth=2, zorder=10)
+            ax2.annotate(name, xy=(lon_sp, lat_sp), fontsize=8, zorder=11,
+                         bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7, ec='none'))
+        ax2.text(0.01, 0.01, '+  user-defined river mouth          ×  user-defined plume core',
+                 transform=ax2.transAxes, fontsize=7, va='bottom', ha='left', zorder=11,
+                 bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.7, ec='none'))
 
     # Add a title to the second subplot with bathymetric and SPM threshold details
     ax2.set_title(f'Area with bathy > {bathymetric_threshold}m and SPM {"; ".join([f"> {round(value, 1)} ({key})" for key, value in thresholds.items() if value is not None])} g m-3')
@@ -987,6 +997,67 @@ def filter_gradient_points_vectorized(gradient_values, gradient_points, absolute
     return gradient_points_to_keep, gradient_values_to_keep, absolute_values_to_keep
 
 
+def estimate_threshold_bounds_from_near_mouth_pixels(
+    spm_values,
+    land_mask_values,
+    start_pixel,
+    lower_quantile=0.25,
+    upper_quantile=0.75,
+    radius_pixels=15,
+):
+    """
+    Estimate SPM threshold bounds from pixels within a radius of the river mouth.
+
+    Samples all finite, non-land pixels within `radius_pixels` of `start_pixel`
+    and returns (lower_quantile, upper_quantile) of their SPM distribution.
+    These replace hand-tuned ``minimal_threshold`` / ``maximal_threshold`` values
+    when those are set to ``None``, making the dynamic threshold self-calibrating.
+
+    Falls back to the full water-pixel distribution if fewer than five valid
+    near-mouth pixels are found (e.g. when the starting point is cloud-covered).
+
+    Parameters
+    ----------
+    spm_values : ndarray
+        2D numpy array of SPM concentrations (reduced-resolution scene).
+    land_mask_values : ndarray
+        2D boolean array; True indicates land.
+    start_pixel : tuple of int
+        (row, col) pixel index of the river-mouth starting point.
+    lower_quantile : float
+        Quantile for ``minimal_threshold`` (default 0.25).
+    upper_quantile : float
+        Quantile for ``maximal_threshold`` (default 0.75).
+    radius_pixels : int
+        Sampling radius in pixels around ``start_pixel`` (default 15).
+
+    Returns
+    -------
+    minimal_threshold : float
+    maximal_threshold : float
+    """
+    r0, c0 = start_pixel
+    rows, cols = spm_values.shape
+
+    r_range = np.arange(max(0, r0 - radius_pixels), min(rows, r0 + radius_pixels + 1))
+    c_range = np.arange(max(0, c0 - radius_pixels), min(cols, c0 + radius_pixels + 1))
+    rr, cc = np.meshgrid(r_range, c_range, indexing='ij')
+
+    within = np.sqrt((rr - r0) ** 2 + (cc - c0) ** 2) <= radius_pixels
+    r_idx = rr[within]
+    c_idx = cc[within]
+
+    values = spm_values[r_idx, c_idx]
+    valid = np.isfinite(values) & ~land_mask_values[r_idx, c_idx]
+    sample = values[valid]
+
+    if sample.size < 5:
+        water = spm_values[np.isfinite(spm_values) & ~land_mask_values]
+        sample = water if water.size > 0 else np.array([1.0, 10.0])
+
+    return float(np.nanquantile(sample, lower_quantile)), float(np.nanquantile(sample, upper_quantile))
+
+
 def find_SPM_threshold(spm_map, land_mask, start_point, directions, max_steps, maximal_threshold, minimal_threshold, quantile_to_use) : 
 
     """
@@ -1017,13 +1088,20 @@ def find_SPM_threshold(spm_map, land_mask, start_point, directions, max_steps, m
                                                                                    lower_high_values_to=maximal_threshold,
                                                                                    create_X_intermediates_between_each_direction = 2)
 
-    threshold_on_gradient_values = np.nanmax(gradient_values[np.isfinite(gradient_values)]) * 0.9
+    finite_grads = gradient_values[np.isfinite(gradient_values)]
+    if finite_grads.size == 0:
+        return minimal_threshold, np.array([]), gradient_points
+
+    threshold_on_gradient_values = np.nanmax(finite_grads) * 0.9
 
     filtered_points, _, filtered_values = filter_gradient_points_vectorized(gradient_values, gradient_points, absolute_values, land_mask,
                                                                             threshold_on_gradient_values = threshold_on_gradient_values)
 
+    if filtered_values.size == 0 or not np.any(np.isfinite(filtered_values)):
+        return minimal_threshold, np.array([]), gradient_points
+
     SPM_threshold = np.max( [np.nanquantile(filtered_values, quantile_to_use), minimal_threshold] )
-    
+
     return SPM_threshold, filtered_points, gradient_points
 
 
@@ -1575,27 +1653,29 @@ def return_stats_dictionnary(final_mask_area, spm_reduced_map, spm_map, paramete
     if return_empty_dict : 
         return make_an_empty_dict()
      
+    # Identify pixels in the plume area that carry finite SPM values.
+    # This check must come before nanmean/nanstd to avoid "Mean of empty slice"
+    # warnings when every masked pixel happens to be NaN (e.g. cloud-covered).
+    plume_area_pixels = np.array(np.where(final_mask_area & np.isfinite(spm_reduced_map)))
+    if plume_area_pixels.size == 0 :
+        return make_an_empty_dict()
+    lat_plume_area_pixels, lon_plume_area_pixels = final_mask_area.lat[plume_area_pixels[0]], final_mask_area.lon[plume_area_pixels[1]]
+
     # Calculate the number of pixels in the plume area
     n_pixel_in_the_plume_area = np.sum(final_mask_area) # Number of pixels in the plume area
-    
+
     # Calculate the area of one pixel in km² from the actual grid spacing
     _pixel_lat_deg = float(np.diff(spm_reduced_map.lat.values).mean())
     _pixel_lon_deg = float(np.diff(spm_reduced_map.lon.values).mean())
     area_of_one_pixel = (_pixel_lon_deg * 111.32 * np.cos(np.radians(np.mean(coordinate_range_bounds(parameters['lat_range_of_plume_area']))))) * (_pixel_lat_deg * 111.32)
     area_of_the_plume_mask = np.sum(final_mask_area) * area_of_one_pixel # Total plume area in km²
-    
+
     # Compute mean and standard deviation of SPM in the plume area
     mean_SPM_in_the_plume_area = np.nanmean(spm_reduced_map.values[final_mask_area]) # Mean SPM in the plume area
     sd_SPM_in_the_plume_area = np.nanstd(spm_reduced_map.values[final_mask_area]) # Standard deviation of SPM
-    
+
     # Calculate the mass of SPM in the plume area
     mass_SPM_in_the_plume_area = mean_SPM_in_the_plume_area * area_of_the_plume_mask * 1000 # Calculate mass of SPM
-    
-    # Identify pixels in the plume area
-    plume_area_pixels = np.array(np.where(final_mask_area & np.isfinite(spm_reduced_map)))
-    if plume_area_pixels.size == 0 : 
-        return make_an_empty_dict()
-    lat_plume_area_pixels, lon_plume_area_pixels = final_mask_area.lat[plume_area_pixels[0]], final_mask_area.lon[plume_area_pixels[1]]
         
     # Calculate centroids of the plume area
     centroid_of_the_plume_area = [ float(lat_plume_area_pixels.mean()) , float(lon_plume_area_pixels.mean()) ]
@@ -1960,7 +2040,8 @@ def main_process(file_name,
                       coast_shape=coast_shape,
                       plot_the_plume_area=False,
                       color_limits=color_limits,
-                      starting_points=parameters['starting_points'])
+                      starting_points=parameters['starting_points'],
+                      core_of_the_plumes=parameters['core_of_the_plumes'])
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
@@ -2001,7 +2082,8 @@ def main_process(file_name,
                       coast_shape=coast_shape,
                       plot_the_plume_area=False,
                       color_limits=color_limits,
-                      starting_points=parameters['starting_points'])
+                      starting_points=parameters['starting_points'],
+                      core_of_the_plumes=parameters['core_of_the_plumes'])
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
@@ -2031,7 +2113,8 @@ def main_process(file_name,
                   coast_shape=coast_shape,
                   show_bathymetric_mask=True,
                   color_limits=color_limits,
-                  starting_points=parameters['starting_points'])
+                  starting_points=parameters['starting_points'],
+                  core_of_the_plumes=parameters['core_of_the_plumes'])
 
     # Cleanup to free memory
     del final_mask_area, all_mask_area
@@ -2111,13 +2194,27 @@ class Create_the_plume_mask :
             SPM_threshold = precomputed_threshold
 
         elif dynamic_determination_of_SPM_threshold:
+            minimal_threshold = self.parameters['minimal_threshold'][self.plume_name]
+            maximal_threshold = self.parameters['maximal_threshold'][self.plume_name]
+
+            if minimal_threshold is None or maximal_threshold is None:
+                lower_q = self.parameters.get('near_mouth_lower_quantile', 0.25)
+                upper_q = self.parameters.get('near_mouth_upper_quantile', 0.75)
+                minimal_threshold, maximal_threshold = estimate_threshold_bounds_from_near_mouth_pixels(
+                    self.spm_map.values,
+                    self.land_mask.values,
+                    self.parameters['pixel_starting_points'][self.plume_name],
+                    lower_quantile=lower_q,
+                    upper_quantile=upper_q,
+                )
+
             SPM_threshold, points_used_for_finding_SPM_threshold, all_points_tested = find_SPM_threshold(spm_map = self.spm_map,
                                                 land_mask = self.land_mask,
                                                 start_point = self.parameters['pixel_starting_points'][self.plume_name],
                                                 directions = self.parameters['searching_strategy_directions'][self.plume_name],
                                                 max_steps = self.parameters['max_steps_for_the_directions'][self.plume_name],
-                                                maximal_threshold = self.parameters['maximal_threshold'][self.plume_name],
-                                                minimal_threshold = self.parameters['minimal_threshold'][self.plume_name],
+                                                maximal_threshold = maximal_threshold,
+                                                minimal_threshold = minimal_threshold,
                                                 quantile_to_use = self.parameters['quantile_to_use'][self.plume_name])
             self.points_used_for_finding_SPM_threshold = points_used_for_finding_SPM_threshold
 
