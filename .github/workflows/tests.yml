@@ -1,0 +1,49 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install panache and test dependencies
+        run: pip install -e "." pytest pytest-cov
+
+      - name: Run tests with coverage
+        env:
+          MPLBACKEND: Agg
+        run: |
+          python -m pytest \
+            testing/test_cli.py \
+            testing/test_config_extra.py \
+            testing/test_io_extra.py \
+            testing/test_pipeline.py \
+            testing/test_plume_functions.py \
+            testing/test_plume_methods.py \
+            testing/test_runner_internals.py \
+            testing/test_searching_strategy_presets.py \
+            testing/test_utils_extra.py \
+            --cov=panache \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -q
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

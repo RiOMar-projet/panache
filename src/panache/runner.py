@@ -407,6 +407,16 @@ def run_batch(config: RunConfig) -> Path:
     native_lon_res = float(np.diff(ds.lon.values).mean())
     print(f"Native data resolution: {native_lat_res:.5f}° lat × {native_lon_res:.5f}° lon", flush=True)
 
+    n_files = len(input_files)
+    bytes_needed = n_files * ds.size * 8  # float64 worst case
+    gb_needed = bytes_needed / 1e9
+    print(f"Estimated peak RAM to load all files: {gb_needed:.2f} GB", flush=True)
+    if _HAS_PSUTIL:
+        available_gb = psutil.virtual_memory().available / 1e9
+        print(f"Available RAM:                        {available_gb:.2f} GB", flush=True)
+    else:
+        print("  (Install psutil to enable automatic RAM availability check.)", flush=True)
+
     if config.lat_new_resolution is not None or config.lon_new_resolution is not None:
         target_lat = config.lat_new_resolution or native_lat_res
         target_lon = config.lon_new_resolution or native_lon_res
