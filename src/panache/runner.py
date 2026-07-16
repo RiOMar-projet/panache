@@ -441,6 +441,7 @@ def run_batch(config: RunConfig) -> Path:
     total = len(tasks)
 
     if config.nb_cores > 1:
+        multiprocess.set_start_method('spawn', force=True)
         with multiprocess.Pool(config.nb_cores) as pool:
             for completed, (input_file, result) in enumerate(
                 pool.imap_unordered(_run_task, tasks), 1

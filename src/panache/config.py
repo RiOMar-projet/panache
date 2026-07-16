@@ -19,11 +19,6 @@ REQUIRED_PARAMETER_KEYS = {
     "maximal_bathymetric_for_zone_with_resuspension",
     "minimal_distance_from_estuary_for_zone_with_resuspension",
     "max_steps_for_the_directions",
-    "maximal_threshold",
-    "minimal_threshold",
-    "quantile_to_use",
-    "fixed_threshold",
-    "river_mouth_to_exclude",
 }
 
 
@@ -78,7 +73,25 @@ def build_parameters(raw_parameters: dict) -> dict:
     parameters["searching_strategies"] = _normalize_searching_strategies(parameters["searching_strategies"])
     parameters["starting_points"] = _normalize_coordinate_map(parameters["starting_points"])
     parameters["core_of_the_plumes"] = _normalize_coordinate_map(parameters["core_of_the_plumes"])
-    parameters["river_mouth_to_exclude"] = _normalize_coordinate_map(parameters["river_mouth_to_exclude"])
+
+    plume_names = list(parameters["starting_points"].keys())
+
+    # Optional per-plume threshold parameters.
+    # None for maximal/minimal triggers automatic estimation from near-mouth pixels in runner.py.
+    if "maximal_threshold" not in parameters:
+        parameters["maximal_threshold"] = {name: None for name in plume_names}
+    if "minimal_threshold" not in parameters:
+        parameters["minimal_threshold"] = {name: None for name in plume_names}
+    if "quantile_to_use" not in parameters:
+        parameters["quantile_to_use"] = {name: 0.2 for name in plume_names}
+    if "fixed_threshold" not in parameters:
+        parameters["fixed_threshold"] = {name: None for name in plume_names}
+
+    # Optional: nearby river mouths to exclude from the plume mask; default is none.
+    parameters["river_mouth_to_exclude"] = _normalize_coordinate_map(
+        parameters.get("river_mouth_to_exclude", {})
+    )
+
     parameters["searching_strategy_directions"] = searching_strategy_directions_from_presets(
         parameters["searching_strategies"]
     )

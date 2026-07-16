@@ -9,6 +9,7 @@
 from .utils import (
     coordinate_range_bounds,
     load_file,
+    SEARCHING_STRATEGY_PRESETS,
 )
 from .io import NoValidMapDataError, load_map_data
 
@@ -25,17 +26,16 @@ from scipy.ndimage import label, binary_dilation, center_of_mass, distance_trans
 from matplotlib.path import Path as mPath
 from collections import deque
 from shapely.geometry import Polygon
-from shapely.vectorized import contains
+from shapely import contains_xy
 from skimage import morphology
 from functools import reduce
 
-try:
-    import multiprocess
-except ImportError:  # Fall back to the stdlib module for simple batch runs.
-    import multiprocessing as multiprocess
-
-multiprocess.set_start_method('spawn', force = True) # MacOS friendly multiprocessing
-
+_OPPOSITE_FAN = {
+    'northward_fan': 'southward_fan',
+    'southward_fan': 'northward_fan',
+    'eastward_fan':  'westward_fan',
+    'westward_fan':  'eastward_fan',
+}
 
 # =============================================================================
 #### Utility function
@@ -1088,6 +1088,8 @@ def find_SPM_threshold(spm_map, land_mask, start_point, directions, max_steps, m
                                                                                    lower_high_values_to=maximal_threshold,
                                                                                    create_X_intermediates_between_each_direction = 2)
 
+    if gradient_values is None:
+        return minimal_threshold, np.array([]), gradient_points
     finite_grads = gradient_values[np.isfinite(gradient_values)]
     if finite_grads.size == 0:
         return minimal_threshold, np.array([]), gradient_points
@@ -1738,7 +1740,7 @@ def create_polygon_mask(dataset, parameters) :
     
         # Create a grid of lon/lat and check if points are inside the polygon
         lon, lat = np.meshgrid(dataset.coords['lon'], dataset.coords['lat'])
-        inside_polygon_mask = contains(polygon, lon, lat)
+        inside_polygon_mask = contains_xy(polygon, lon, lat)
         
     else : 
         
@@ -2224,6 +2226,12 @@ class Create_the_plume_mask :
 
         else:
             SPM_threshold = self.parameters['fixed_threshold'][self.plume_name]
+            if SPM_threshold is None:
+                raise ValueError(
+                    f"No threshold available for '{self.plume_name}'. "
+                    "Set dynamic_threshold=true, spm_threshold, global_threshold_quantile, "
+                    "or fixed_threshold in the parameters block."
+                )
 
         self.SPM_threshold = SPM_threshold
         self.protocol.append(f'{len(self.protocol)} : determine_SPM_threshold')
@@ -2649,6 +2657,22 @@ def Pipeline_to_delineate_the_plume(ds_reduced,
 
     the_plume.determine_SPM_threshold(dynamic_thresh, precomputed_threshold=precomputed_threshold)
     the_plume.do_a_raw_plume_detection()
+
+    # Second flood fill with the opposite fan direction, then OR-merge with the first mask.
+    # This removes linear artifacts caused by the fan direction enforcing a one-sided BFS
+    # expansion from the river mouth starting point.
+    mask_forward = the_plume.plume_mask.copy()
+    original_directions = the_plume.parameters['searching_strategy_directions'][plume_name]
+    opposite_preset = _OPPOSITE_FAN[parameters['searching_strategies'][plume_name]]
+    the_plume.parameters['searching_strategy_directions'][plume_name] = list(SEARCHING_STRATEGY_PRESETS[opposite_preset])
+    the_plume.do_a_raw_plume_detection()
+    the_plume.parameters['searching_strategy_directions'][plume_name] = original_directions
+    the_plume.plume_mask = xr.DataArray(
+        mask_forward.values | the_plume.plume_mask.values,
+        coords=the_plume.spm_map.coords,
+        dims=the_plume.spm_map.dims,
+    )
+
     the_plume.include_cloudy_regions_to_plume_area()
     the_plume.remove_the_areas_with_sediment_resuspension(
         maximal_bathymetry=parameters['maximal_bathymetric_for_zone_with_resuspension'][plume_name],

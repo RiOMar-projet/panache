@@ -84,15 +84,19 @@ src/panache/
 ### Config modes
 
 - **Zone preset** (`zone` key): resolved by `define_parameters` in `utils.py`. Currently defined zones: `BAY_OF_SEINE`, `BAY_OF_BISCAY`, `GULF_OF_LION`, `SOUTHERN_BRITTANY`.
-- **Custom parameters** (`parameters` key): all keys in `REQUIRED_PARAMETER_KEYS` (`config.py:11`) must be present. `searching_strategies` values must be one of the four named presets: `northward_fan`, `southward_fan`, `eastward_fan`, `westward_fan`. These are resolved to pixel-direction tuples by `searching_strategy_directions_from_presets`.
+- **Custom parameters** (`parameters` key): the 10 keys in `REQUIRED_PARAMETER_KEYS` (`config.py:11`) must be present. Five additional keys are optional and filled with defaults by `build_parameters` when absent: `maximal_threshold`, `minimal_threshold`, `quantile_to_use`, `fixed_threshold`, and `river_mouth_to_exclude`. `searching_strategies` values must be one of the four named presets: `northward_fan`, `southward_fan`, `eastward_fan`, `westward_fan`. These are resolved to pixel-direction tuples by `searching_strategy_directions_from_presets`.
 
 ### Key algorithm concepts in `plume_algorithm.py`
 
 - `flood_fill`: BFS-based connected-region growth from estuary starting point, respecting SPM threshold and directional constraints.
-- `find_SPM_threshold` / `compute_gradient_with_directions_vectorized`: dynamic threshold detection using SPM gradients along directional transects from the river mouth.
+- `find_SPM_threshold` / `compute_gradient_with_directions_vectorized`: dynamic threshold detection using SPM gradients along directional transects from the river mouth. `compute_gradient_with_directions_vectorized` returns `None` (not an array) when all transect pixels are clipped to the same `maximal_threshold` (range = 0, normalisation undefined). `find_SPM_threshold` guards against this and two other empty-array edge cases, returning `minimal_threshold` as the fallback in all three.
+- `Pipeline_to_delineate_the_plume`: orchestration function that runs two BFS flood fills per plume — first in the configured fan direction, then in the opposite direction (via `_OPPOSITE_FAN` and `SEARCHING_STRATEGY_PRESETS`) — and OR-merges the two masks. The second fill removes linear artifacts caused by the directional constraint of the first pass.
+- `_OPPOSITE_FAN`: module-level dict in `plume_algorithm.py` mapping each fan preset to its opposite (`northward_fan` ↔ `southward_fan`, `eastward_fan` ↔ `westward_fan`). Used exclusively inside `Pipeline_to_delineate_the_plume`.
+- `make_the_plot`: accepts `core_of_the_plumes` (keyword, default `None`). When provided, renders a grey `×` at each core coordinate and a labelled black `+` at each starting point on the right-hand panel of the daily PNG, with a subtitle legend. All three call sites in `main_process` pass this argument.
 - `derive_masks_from_bathymetry`: produces `cloud_check_water_mask` (open-water pixels for cloud coverage assessment) and `land_mask` from the bathymetry pickle.
 - `create_polygon_mask`: restricts detection to the `lat_range_of_plume_area` / `lon_range_of_plume_area` polygon defined in the parameters.
 - `remove_coastal_areas_with_sediment_resuspension`: removes shallow-water, near-estuary pixels likely driven by resuspension rather than plume signal.
+- `river_mouth_to_exclude`: optional parameter (defaults to `{}`) used to mask pixels near secondary tidal channels that would otherwise contaminate the plume mask (e.g. Canal de Caen à la mer in `BAY_OF_SEINE`). It is not dead code.
 
 ### `starting_points` vs `core_of_the_plumes`
 

@@ -1,5 +1,96 @@
 # Change log
 
+## 2026-07-14
+
+### Bug fix: `RuntimeWarning: Mean of empty slice` in `find_SPM_threshold`
+
+Three early-return guards were added to `find_SPM_threshold` in `plume_algorithm.py` to handle edge
+cases that previously triggered `np.nanquantile` on an empty array:
+
+1. **`None` gradient** — `compute_gradient_with_directions_vectorized` returns `None` when every
+   non-NaN transect pixel is clipped to the same `maximal_threshold` value (range = 0, normalisation
+   undefined). The new first guard catches this and immediately returns `minimal_threshold`.
+2. **No finite gradients** — if all gradient values are NaN (e.g. transects composed entirely of
+   cloud pixels), the second guard returns `minimal_threshold` before calling `nanquantile`.
+3. **No candidate edge pixels** — if the 90 % steepness filter eliminates every gradient point, the
+   third guard returns `minimal_threshold` before the quantile call.
+
+These cases most commonly arise during storm events (saturated SPM >> `maximal_threshold` on every
+transect) or when heavy cloud cover breaks all gradient transects.
+
+---
+
+### Bug fix: `RuntimeWarning: Mean of empty slice` in `return_stats_dictionnary`
+
+`return_stats_dictionnary` in `plume_algorithm.py` now checks whether any finite SPM pixels lie
+within the final plume mask before calling `np.nanmean` / `np.nanstd`. When the entire detected
+plume area is cloud-covered (all NaN), the function returns an empty-stats dict immediately via
+`make_an_empty_dict()` rather than passing an empty array to `nanmean`.
+
+---
+
+### New: river mouth labels and plume core markers on daily PNG maps
+
+`make_the_plot` in `plume_algorithm.py` now accepts a `core_of_the_plumes` keyword argument.
+When provided, the following are rendered on the right-hand (detected plume) panel of each daily
+PNG:
+
+- A grey `×` at each `core_of_the_plumes` coordinate.
+- A labelled black `+` at each `starting_points` coordinate, with the river mouth name in a
+  white-background annotation box.
+- A subtitle legend at the lower-left explaining the two marker types.
+
+All three `make_the_plot` call sites in `main_process` pass `core_of_the_plumes` from the
+parameters dict. No new dependencies were added.
+
+---
+
+### New: dynamic threshold parameter guide
+
+`testing/dynamic_threshold_parameter_guide.md` documents the interactions between
+`maximal_threshold`, `minimal_threshold`, and `quantile_to_use` in three ways: a step-by-step
+trace through a single transect, an isolated description of each parameter's role, and a
+diagnostic table of what goes wrong when each is mis-set. All examples use literal values from
+the Gironde plume (BAY_OF_BISCAY, August 2000). The file is symlinked to
+`~/RiOMar/manuscript/dynamic_threshold_parameter_guide.md`.
+
+---
+
+### New: inverted-fan second flood fill in `Pipeline_to_delineate_the_plume`
+
+After the initial BFS flood fill, `Pipeline_to_delineate_the_plume` now performs a second
+`do_a_raw_plume_detection()` in the exact opposite fan direction (e.g. `southward_fan` →
+`northward_fan`), then OR-merges the two masks. This removes linear artifacts that arise when the
+fan direction enforces a one-sided BFS expansion from the river mouth starting point.
+
+The mapping between fan presets and their opposites is stored in the module-level dict
+`_OPPOSITE_FAN` in `plume_algorithm.py`. The `SEARCHING_STRATEGY_PRESETS` import from `utils.py`
+is used to look up the pixel-direction tuples for the opposite preset. The original
+`searching_strategy_directions` are restored after the second fill so the rest of the pipeline is
+unaffected.
+
+---
+
+### New: optional threshold parameters in custom parameter configs
+
+`REQUIRED_PARAMETER_KEYS` in `config.py` has been reduced from 15 to 10 keys. The following five
+keys are now optional in the `parameters` block of a custom config JSON:
+
+| Key | Default when absent |
+|---|---|
+| `maximal_threshold` | `{plume_name: None}` for each plume — triggers automatic estimation from near-mouth pixels |
+| `minimal_threshold` | `{plume_name: None}` for each plume — triggers automatic estimation from near-mouth pixels |
+| `quantile_to_use` | `{plume_name: 0.2}` for each plume |
+| `fixed_threshold` | `{plume_name: None}` for each plume |
+| `river_mouth_to_exclude` | `{}` (no exclusions) |
+
+`build_parameters` in `config.py` fills in these defaults after the required-key check.
+`river_mouth_to_exclude` was already optional in zone presets and is now also optional in custom
+parameter blocks; it is used to mask pixels near secondary tidal channels that would otherwise
+contaminate the plume mask (e.g. Canal de Caen à la mer in `BAY_OF_SEINE`).
+
+---
+
 ## 2026-07-09
 
 ### Updated smoke test to match current API

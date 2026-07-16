@@ -289,13 +289,13 @@ def define_parameters(Zone) :
         }
         bathymetric_threshold = 0
         starting_points = {'Gironde' : (45.61, -1.14),
-                           'Charente' : (45.96, -1.16),
+                           'Charente' : (45.98, -1.15),
                            'Sevre' : (46.26, -1.2)}
-        core_of_the_plumes = {'Gironde' : (45.59, -1.15),
-                              'Charente' : (45.98, -1.18),
-                              'Sevre' : (46.24, -1.24)}
-        lat_range_of_plume_area = [44.5, 46.5]
-        lon_range_of_plume_area = [-4, -0.5]
+        core_of_the_plumes = {'Gironde' : (45.61, -1.25),
+                              'Charente' : (46.00, -1.19),
+                              'Sevre' : (46.24, -1.25)}
+        lat_range_of_plume_area = [45.0, 46.5]
+        lon_range_of_plume_area = [-3.5, -0.5]
         threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Gironde' : 20, 'Charente' : 20, 'Sevre' : 20}
@@ -313,7 +313,7 @@ def define_parameters(Zone) :
             'Grand Rhone': 'southward_fan',
             'Petit Rhone': 'southward_fan',
         }
-        bathymetric_threshold = 10
+        bathymetric_threshold = 20
         starting_points = {'Grand Rhone' : (43.32, 4.85),
                            'Petit Rhone' : (43.45, 4.39)}
         core_of_the_plumes = {'Grand Rhone' : (43.30, 4.85),
@@ -343,7 +343,7 @@ def define_parameters(Zone) :
         core_of_the_plumes = {'Loire' : (47.19, -2.36),
                               'Vilaine' : (47.47, -2.59)}
         lat_range_of_plume_area = [46.5, 48]
-        lon_range_of_plume_area = [-5, -1.5]
+        lon_range_of_plume_area = [-4.5, -1.5]
         threshold_of_cloud_coverage_in_percentage = 25
         maximal_bathymetric_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}
         minimal_distance_from_estuary_for_zone_with_resuspension = {'Loire' : 20, 'Vilaine' : 20}

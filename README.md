@@ -31,13 +31,13 @@ source panache_env/bin/activate  # On Windows: panache_env\Scripts\activate
 
 # Upgrade pip and install the package
 pip install --upgrade pip
-pip install panache_env
+pip install panache-riomar
 ```
 
-Once the desired virtual environment has been activate (or not), the **`panache`** module may be installed with:
+To install from source instead:
 
 ```bash
-git clone https://github.com/RiOMar-project/panache.git
+git clone https://github.com/RiOMar-projet/panache.git
 cd panache
 pip install -e .
 ```
@@ -85,20 +85,18 @@ Each run writes its results into the configured `output_dir`:
 ```text
 panache-output/
 ├── Results.csv
-├── GIF.gif
+├── manifest.csv
+├── GIF.gif          (when gif: true)
 └── MAPS/
-    ├── [base_file_name]_plume_mask.png
-    └── [base_file_name]_plume_mask.csv
-    └── [base_file_name]_statistics.csv
+    └── [base_file_name]_plume_mask.png
 ```
 
 | Output | Description |
 | --- | --- |
-| `Results.csv` | Batch-level plume statistics sorted by date. |
-| `GIF.gif` | Animated preview assembled from generated plume maps. |
+| `Results.csv` | Batch-level plume statistics sorted by date, one row per input file. |
+| `manifest.csv` | Record of every input file seen in this run and its status (`Completed`, `Skipped`, `Failed`). Used to resume interrupted runs when `overwrite: false`. |
+| `GIF.gif` | Animated preview assembled from all generated plume maps (optional). |
 | `MAPS/*.png` | One rendered plume map per processed input file. |
-| `MAPS/*_statistics.csv` | Per-scene summary statistics used to rebuild `Results.csv`. |
-| `MAPS/*_plume_mask.csv` | Per-scene plume mask data for detected plume outputs. |
 
 ## ⚙️ Configuration Modes
 
@@ -129,9 +127,11 @@ Search strategies are named presets rather than boolean pixel grids. Set each pl
 
 **`panache`** resolves those preset names into the pixel directions used internally by the plume algorithm.
 
-To see a full example of the rquired arguments, see the example JSON file [here](https://github.com/RiOMar-projet/panache/blob/main/example_parameter_config.json).
+To see a full example of the required arguments, see the [example_parameter_config.json](https://github.com/RiOMar-projet/panache/blob/main/testing/example_parameter_config.json).
 
-Use `lat_range_of_plume_area` and `lon_range_of_plume_area` to define the plume domain used for input subsetting, cloud checks, map extents, and plume masking. Each can be a two-value min/max range, or matching polygon-coordinate lists for polygon plume domains.
+Ten keys are required in the `parameters` block. Five additional keys are optional and filled with sensible defaults when absent: `maximal_threshold`, `minimal_threshold`, `quantile_to_use`, `fixed_threshold`, and `river_mouth_to_exclude`.
+
+Use `lat_range_of_plume_area` and `lon_range_of_plume_area` to define the plume domain used for input subsetting, cloud checks, map extents, and plume masking. Each can be a two-value min/max range, or matching polygon-coordinate lists for non-rectangular domains.
 
 ### `starting_points` and `core_of_the_plumes`
 
@@ -142,6 +142,18 @@ These two parameters are placed near the same location but serve distinct roles 
 `core_of_the_plumes` is a **trusted reference coordinate inside the plume body**, used after the raw mask has been created. It serves three purposes: (1) identifying which connected blob in the flood-fill result belongs to the river plume, (2) acting as the estuary centre when computing distances for the resuspension-removal filter, and (3) locating the main shape during the dilation-and-merge step.
 
 In practice the two coordinates are often near-identical, but they may differ when the river mouth is very close to the coastline. In that case `starting_points` is placed right at the mouth (a coastal water pixel), while `core_of_the_plumes` is placed slightly further offshore, within the expected plume footprint, to ensure the shape-selection step reliably identifies the correct blob. See the `BAY_OF_SEINE` preset in `utils.py` for an example: the Seine starting point sits at the coast (0.145°E) while its core is offset 0.15° offshore (0.0°E).
+
+### 📏 SPM Threshold Modes
+
+`panache` supports three ways to set the SPM threshold used by the flood-fill algorithm, evaluated in this priority order:
+
+| Mode | Config key | Description |
+| --- | --- | --- |
+| Dynamic | `"dynamic_threshold": true` | Per-scene, per-plume gradient-based threshold computed by `find_SPM_threshold`. Adapts automatically to each satellite scene. |
+| Global quantile | `"global_threshold_quantile": 0.95` | A single quantile computed from the full input dataset before processing begins and applied uniformly to all scenes. Recommended for long time-series analysis; see Gangloff et al. (2017). |
+| Fixed | `fixed_threshold` in `parameters` or zone preset | A static per-plume value. Fastest; useful when the SPM regime is stable and well-characterised. |
+
+`dynamic_threshold` and `global_threshold_quantile` are mutually exclusive. If neither is set, `panache` falls back to `fixed_threshold`.
 
 ## 🛰️ Input Expectations
 
