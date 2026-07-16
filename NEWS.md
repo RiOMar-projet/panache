@@ -1,0 +1,139 @@
+# What's New
+
+## v0.3.x — July 2026
+
+### Stable release: four zones tested end-to-end
+
+The detection algorithm has been validated across all four built-in zone presets
+(`BAY_OF_SEINE`, `BAY_OF_BISCAY`, `GULF_OF_LION`, `SOUTHERN_BRITTANY`) and the
+Var estuary as an additional edge case. Bathymetry alignment, cloud screening,
+threshold selection, and plume delineation all produce physically reasonable
+output for these regions.
+
+### Codecov integration and 90% test coverage
+
+Continuous integration now uploads coverage reports to
+[Codecov](https://codecov.io/gh/RiOMar-projet/panache) on every push to `main`.
+The test suite covers 90% of the source code, spanning unit tests for all major
+pipeline components and a synthetic smoke test that runs the full pipeline
+without real satellite data.
+
+### Documentation website
+
+A Sphinx documentation site (this site) is now deployed automatically from the
+`main` branch via GitHub Actions. It includes installation instructions, a
+quick-start guide, configuration reference, and a full API reference generated
+from docstrings.
+
+### Bug fix: empty-slice warnings in `find_SPM_threshold`
+
+Three early-return guards were added to prevent `np.nanquantile` from receiving
+an empty array. These edge cases arise when every transect pixel is clipped to
+the same `maximal_threshold` (storm events with saturated SPM), when heavy cloud
+cover breaks all gradient transects, or when the 90% steepness filter eliminates
+every gradient point. In all three cases the function now returns
+`minimal_threshold` immediately.
+
+### Bug fix: NaN start point in flood fill
+
+`find_nearest_valid_start` now relocates the BFS seed pixel to the nearest
+finite neighbour when the configured `starting_points` coordinate falls on a
+cloud-masked (NaN) pixel. Applies to both the dynamic-threshold transect origin
+and the flood-fill entry point.
+
+### Bug fix: empty-mask statistics
+
+`return_stats_dictionnary` checks for finite SPM pixels within the plume mask
+before calling `np.nanmean` / `np.nanstd`. When the detected area is entirely
+cloud-covered, the function returns an empty-stats dict via `make_an_empty_dict`
+rather than raising a warning.
+
+### New: river mouth labels and plume core markers on daily PNG maps
+
+Each PNG now shows a grey `×` at each `core_of_the_plumes` coordinate and a
+labelled black `+` at each `starting_points` coordinate, with the river-mouth
+name in a white annotation box. A subtitle legend at the lower-left explains
+the two marker types.
+
+### New: global bounding-box threshold
+
+When `global_threshold_quantile` is set in the config, `panache` now loads the
+full spatial bounding box for each input file to compute the quantile threshold,
+rather than reading only the plume-detection sub-region. This produces a more
+representative ambient-background threshold for the whole scene.
+
+### New: inverted-fan second flood fill
+
+`Pipeline_to_delineate_the_plume` performs a second BFS pass in the opposite
+fan direction (e.g. `southward_fan` → `northward_fan`) and OR-merges the two
+masks. This removes linear artifacts caused by the directional constraint of the
+first pass.
+
+### New: five threshold parameters are now optional
+
+`REQUIRED_PARAMETER_KEYS` has been reduced from 15 to 10 keys. The following
+five keys are now optional in a custom `parameters` block and are filled with
+sensible defaults by `build_parameters` when absent: `maximal_threshold`,
+`minimal_threshold`, `quantile_to_use`, `fixed_threshold`, and
+`river_mouth_to_exclude`.
+
+---
+
+## v0.2.x — June–July 2026
+
+### `input_path` replaces `input_glob` / `input_root`
+
+The two previous input arguments `input_glob` and `input_root` have been merged
+into a single `input_path` key. Pass a glob string (`/data/spm/*.nc`), a
+directory path, or a single file path — `panache` figures out which it is.
+
+### Results compiled from all `_statistics.csv` files
+
+After processing, `run_batch` now searches all subdirectories of `output_dir`
+for `_statistics.csv` files written in previous runs and merges them with the
+current batch. This means interrupted runs can be resumed with `overwrite: false`
+and the final `Results.csv` will always contain the full time series.
+
+### GIF is now optional
+
+Set `"gif": false` in the config to skip animated GIF generation. Useful for
+large batches where GIF assembly adds significant wall-clock time.
+
+### Error handling for empty or malformed files
+
+Files that cannot be opened or that contain no valid data are now caught and
+logged as `Failed` in `manifest.csv` rather than raising an unhandled exception
+and aborting the batch.
+
+### Flood fill seed point improvements
+
+The BFS starting pixel can now be configured more intuitively. The algorithm
+accepts any water pixel near the river mouth and handles edge cases where the
+initial pixel sits at the boundary of the bathymetry mask.
+
+---
+
+## v0.1.x — May 2026
+
+### Initial release
+
+`panache` is a Python package for detecting river plumes in gridded satellite
+data (SPM in NetCDF format). It implements a BFS flood-fill algorithm with
+dynamic or fixed SPM thresholds, bathymetry-based land and cloud masking, and
+directional fan constraints.
+
+**Key capabilities in the initial release:**
+
+- Reads NetCDF files directly via `xarray`; common SPM variable names are
+  detected automatically.
+- Two config modes: `zone` (built-in presets) and `parameters` (fully custom).
+- Four built-in zone presets: `BAY_OF_SEINE`, `BAY_OF_BISCAY`, `GULF_OF_LION`,
+  `SOUTHERN_BRITTANY`.
+- Four fan directions: `northward_fan`, `southward_fan`, `eastward_fan`,
+  `westward_fan`.
+- Three SPM threshold modes: dynamic (per-scene gradient), global quantile
+  (dataset-wide), and fixed (per-plume constant).
+- Single-core and multi-core batch processing via `multiprocess`.
+- Outputs: `Results.csv`, `manifest.csv`, per-file PNG maps, optional GIF.
+- Automatic bathymetry download via `bathyreq` when the pickle is absent.
+- Installable from PyPI as `panache-riomar`; CLI entry point is `panache`.

@@ -46,6 +46,7 @@ dependencies = [
 docs = [
   "sphinx",
   "pydata-sphinx-theme",
+  "myst-parser",
 ]
 
 [project.urls]

@@ -14,6 +14,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "myst_parser",
 ]
 
 templates_path = ["_templates"]
@@ -33,4 +34,14 @@ html_static_path = ["_static"]
 html_theme_options = {
     "github_url": "https://github.com/RiOMar-projet/panache",
     "show_toc_level": 2,
+    "navbar_end": ["navbar-icon-links"],
+    "icon_links": [
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/panache-riomar/",
+            "icon": "fa-solid fa-box",
+        },
+    ],
+    "footer_start": ["copyright"],
+    "footer_end": ["sphinx-version"],
 }

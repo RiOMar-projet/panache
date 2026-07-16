@@ -1,6 +1,10 @@
 panache
 =======
 
+.. image:: https://codecov.io/gh/RiOMar-projet/panache/graph/badge.svg?token=I54RR0P060
+   :target: https://codecov.io/gh/RiOMar-projet/panache
+   :alt: codecov
+
 **panache** is a Python package for detecting river plumes in gridded
 geophysical satellite data (primarily suspended particulate matter, SPM, in
 NetCDF format).
@@ -57,4 +61,5 @@ Each run writes its results into the configured ``output_dir``:
    :maxdepth: 1
    :hidden:
 
+   news
    api
