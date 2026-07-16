@@ -30,7 +30,6 @@ from .utils import align_bathymetry_to_resolution, coordinate_range_bounds
 from .plume_algorithm import (
     create_polygon_mask,
     derive_masks_from_bathymetry,
-    estimate_threshold_bounds_from_near_mouth_pixels,
     find_the_index_of_the_plume_starting_point,
     main_process,
     reduce_resolution,
@@ -210,6 +209,7 @@ def compute_global_colour_limits(
     5th and 95th percentiles of all finite values across the bbox and all time steps.
     """
     n = len(input_files)
+    n_digits = len(str(n))
     n_pixels = sample_ds.size
     bytes_needed = n * n_pixels * 8
     gb_needed = bytes_needed / 1e9
@@ -234,7 +234,12 @@ def compute_global_colour_limits(
     lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
     all_values: list[np.ndarray] = []
 
-    for path in input_files:
+    for i, path in enumerate(input_files, 1):
+        print(
+            f"\r  [{i:{n_digits}d}/{n}] {path.name:<60}",
+            end="",
+            flush=True,
+        )
         try:
             da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
             vals = da.values.ravel()
@@ -245,6 +250,8 @@ def compute_global_colour_limits(
             print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
             continue
 
+    print(flush=True)
+
     if not all_values:
         return 0.1, 1.0
 
@@ -253,6 +260,103 @@ def compute_global_colour_limits(
     vmax = float(max(np.nanquantile(combined, 0.95), 1.0))
     print(f"  Global colourbar: vmin={vmin:.4f}, vmax={vmax:.4f}\n", flush=True)
     return vmin, vmax
+
+
+def _compute_dynamic_threshold_data(
+    input_files: list[Path],
+    parameters: dict,
+    variable_name: str | None,
+    pixel_starts: dict[str, tuple[int, int]],
+    land_mask_values: np.ndarray,
+    lower_quantile: float,
+    upper_quantile: float,
+    lat_new_resolution: float | None,
+    lon_new_resolution: float | None,
+    radius_pixels: int = 15,
+) -> tuple[dict[str, tuple[float, float]], tuple[float, float]]:
+    """Load the full file stack to compute near-mouth threshold bounds and colour limits.
+
+    A single pass over all input files accumulates near-mouth SPM samples for each
+    plume in ``pixel_starts`` and colour-limit values from the full bbox.  Each file
+    is reduced to the run resolution (if configured) so that the pixel indices in
+    ``pixel_starts`` remain valid.
+
+    Returns
+    -------
+    bounds : dict mapping plume name → (minimal_threshold, maximal_threshold)
+    colour_limits : (vmin, vmax)
+    """
+    n = len(input_files)
+    n_digits = len(str(n))
+    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
+    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
+
+    plume_samples: dict[str, list[np.ndarray]] = {name: [] for name in pixel_starts}
+    colour_values: list[np.ndarray] = []
+
+    print(
+        f"\nLoading {n} files to estimate near-mouth threshold bounds and colour limits...",
+        flush=True,
+    )
+
+    for i, path in enumerate(input_files, 1):
+        print(
+            f"\r  [{i:{n_digits}d}/{n}] {path.name:<60}",
+            end="",
+            flush=True,
+        )
+        try:
+            da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
+        except NoValidMapDataError:
+            continue
+        except Exception as exc:
+            print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
+            continue
+
+        if lat_new_resolution is not None or lon_new_resolution is not None:
+            da = reduce_resolution(da, lat_new_resolution, lon_new_resolution)
+
+        vals = da.values
+        rows, cols = vals.shape
+
+        finite_pos = vals[np.isfinite(vals) & (vals > 0)]
+        if finite_pos.size > 0:
+            colour_values.append(finite_pos)
+
+        for plume_name, (r0, c0) in pixel_starts.items():
+            r_range = np.arange(max(0, r0 - radius_pixels), min(rows, r0 + radius_pixels + 1))
+            c_range = np.arange(max(0, c0 - radius_pixels), min(cols, c0 + radius_pixels + 1))
+            rr, cc = np.meshgrid(r_range, c_range, indexing='ij')
+            within = np.sqrt((rr - r0) ** 2 + (cc - c0) ** 2) <= radius_pixels
+            near_vals = vals[rr[within], cc[within]]
+            valid_mask = np.isfinite(near_vals) & ~land_mask_values[rr[within], cc[within]]
+            if valid_mask.any():
+                plume_samples[plume_name].append(near_vals[valid_mask])
+
+    print(flush=True)
+
+    bounds: dict[str, tuple[float, float]] = {}
+    for plume_name, chunks in plume_samples.items():
+        sample = np.concatenate(chunks) if chunks else np.array([1.0, 10.0])
+        lo = float(np.nanquantile(sample, lower_quantile))
+        hi = float(np.nanquantile(sample, upper_quantile))
+        bounds[plume_name] = (lo, hi)
+        print(
+            f"  '{plume_name}': "
+            f"p{lower_quantile * 100:.0f}={lo:.2f}, "
+            f"p{upper_quantile * 100:.0f}={hi:.2f} g m⁻³",
+            flush=True,
+        )
+
+    if colour_values:
+        combined = np.concatenate(colour_values)
+        vmin = float(max(np.nanmin(combined), 0.1))
+        vmax = float(max(np.nanquantile(combined, 0.95), 1.0))
+    else:
+        vmin, vmax = 0.1, 1.0
+    print(f"  Global colourbar: vmin={vmin:.4f}, vmax={vmax:.4f}\n", flush=True)
+
+    return bounds, (vmin, vmax)
 
 
 def _read_manifest(output_dir: Path) -> set[str]:
@@ -336,31 +440,35 @@ def run_batch(config: RunConfig) -> Path:
 
     # --- Pre-compute near-mouth threshold bounds (once per batch) ---
     # When dynamic_threshold is active and a plume's minimal/maximal_threshold is
-    # None, estimate it from the first valid scene so values are stable across the
+    # None, estimate it from the full file stack so values are stable across the
     # entire batch rather than re-derived per scene.
+    precomputed_threshold: float | None = None
+    global_colour_limits: tuple[float, float] | None = None
+
     if config.dynamic_threshold:
         lower_q = config.near_mouth_lower_quantile
         upper_q = config.near_mouth_upper_quantile
-        print("\nEstimating near-mouth threshold bounds from first valid scene...", flush=True)
-        for plume_name, starting_point in parameters['starting_points'].items():
-            if (parameters['minimal_threshold'][plume_name] is None or
-                    parameters['maximal_threshold'][plume_name] is None):
-                pixel_start = find_the_index_of_the_plume_starting_point(ds_reduced, starting_point)
-                minimal, maximal = estimate_threshold_bounds_from_near_mouth_pixels(
-                    ds_reduced.values,
-                    land_mask.values,
-                    pixel_start,
-                    lower_quantile=lower_q,
-                    upper_quantile=upper_q,
-                )
+        pixel_starts = {
+            plume_name: find_the_index_of_the_plume_starting_point(ds_reduced, starting_point)
+            for plume_name, starting_point in parameters['starting_points'].items()
+            if (parameters['minimal_threshold'][plume_name] is None
+                or parameters['maximal_threshold'][plume_name] is None)
+        }
+        if pixel_starts:
+            bounds, global_colour_limits = _compute_dynamic_threshold_data(
+                input_files,
+                parameters,
+                config.variable_name,
+                pixel_starts,
+                land_mask.values,
+                lower_q,
+                upper_q,
+                config.lat_new_resolution,
+                config.lon_new_resolution,
+            )
+            for plume_name, (minimal, maximal) in bounds.items():
                 parameters['minimal_threshold'][plume_name] = minimal
                 parameters['maximal_threshold'][plume_name] = maximal
-                print(
-                    f"  '{plume_name}': "
-                    f"p{lower_q*100:.0f}={minimal:.2f}, p{upper_q*100:.0f}={maximal:.2f} g m⁻³",
-                    flush=True,
-                )
-        print(flush=True)
 
     # --- Resolve SPM threshold ---
     # Priority: dynamic_threshold (per-scene gradient) > spm_threshold /
@@ -368,9 +476,6 @@ def run_batch(config: RunConfig) -> Path:
     # parameters (zone preset values).
     # When dynamic_threshold is True, precomputed_threshold stays None so the
     # per-scene gradient path in plume_algorithm runs unconditionally.
-    precomputed_threshold: float | None = None
-    global_colour_limits: tuple[float, float] | None = None
-
     if not config.dynamic_threshold:
         if config.spm_threshold is not None:
             precomputed_threshold = config.spm_threshold

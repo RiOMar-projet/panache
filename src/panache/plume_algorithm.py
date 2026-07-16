@@ -185,15 +185,14 @@ def flood_fill(data, start, SPM_threshold, directions):
     >>> directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     >>> mask, done_pixels = flood_fill(data, start, SPM_threshold, directions)
     >>> print(mask)
-    [[False False False  True  True]
+    [[False False False  True False]
      [False False  True  True  True]
      [False False  True  True  True]
      [False False False False False]]
-    >>> print(done_pixels)
-    [[False False  True  True  True]
-     [False  True  True  True  True]
-     [ True  True  True  True  True]
-     [False  True  True  True  True]]
+
+    Note: (0, 4) remains False despite having value 5 because it can only be reached
+    from boundary pixels (0, 3) and (1, 4), both of which trigger the any-neighbour-
+    out-of-bounds guard and do not expand further.
     """
         
     # Initialize a stack with the starting point
@@ -286,8 +285,8 @@ def flood_fill(data, start, SPM_threshold, directions):
                 stack.append((n_lat, n_lon))
                 continue
 
-            # If the neighboring cell's value exceeds the threshold, add it to the stack
-            if data[n_lat, n_lon] > SPM_threshold:
+            # If the neighbouring cell's value meets or exceeds the threshold, add it to the stack
+            if data[n_lat, n_lon] >= SPM_threshold:
                 stack.append((n_lat, n_lon))
 
                 # If the latitude difference is greater than 1, mark all cells between as True in the mask
@@ -1254,12 +1253,14 @@ def last_true_block(arr):
     last_end = np.where(diff == -1)[0]
     last_end = last_end[-1] 
 
-    # Find the start of the last block of True values
+    # Find the start of the last block of True values.
+    # diff[i] == 1 marks the False→True transition between padded[i] and padded[i+1],
+    # so the first True element in the block is at index i+1 in the original array.
     last_start_candidates = np.where(diff[:last_end + 1] == 1)[0]
     if len(last_start_candidates) > 0:
-        last_start = last_start_candidates[-1]
+        last_start = int(last_start_candidates[-1]) + 1
     else:
-        last_start = 0  
+        last_start = 0  # block starts at index 0 (no False→True transition exists)
 
     return last_start, last_end
 

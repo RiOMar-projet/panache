@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panache-riomar"
-version = "0.3.2"
+version = "0.3.3"
 description = "River plume detection on gridded data"
 readme = "README.md"
 license = {file = "LICENSE"}

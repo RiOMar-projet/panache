@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath("../src"))
 project = "panache"
 copyright = "2026, Louis Terrats, Robert W. Schlegel"
 author = "Louis Terrats, Robert W. Schlegel"
-release = _version("panache")
+release = _version("panache-riomar")
 
 extensions = [
     "sphinx.ext.autodoc",

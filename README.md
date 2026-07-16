@@ -127,7 +127,7 @@ Search strategies are named presets rather than boolean pixel grids. Set each pl
 
 **`panache`** resolves those preset names into the pixel directions used internally by the plume algorithm.
 
-To see a full example of the required arguments, see the [example_parameter_config.json](https://github.com/RiOMar-projet/panache/blob/main/testing/example_parameter_config.json).
+To see a full example of the required arguments, see the [example_parameter_config.json](https://github.com/RiOMar-projet/panache/blob/main/example_parameter_config.json).
 
 Ten keys are required in the `parameters` block. Five additional keys are optional and filled with sensible defaults when absent: `maximal_threshold`, `minimal_threshold`, `quantile_to_use`, `fixed_threshold`, and `river_mouth_to_exclude`.
 

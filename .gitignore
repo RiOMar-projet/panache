@@ -37,9 +37,11 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-PYTHON_PACKAGE_BEST_PRACTICES.md
-testing/
 htmlcov/
+testing/output/
+testing/smoke_tests/
+testing/test_multi_plume_output/
+testing/test_single_file_plume_output/
 .tox/
 .nox/
 .coverage
