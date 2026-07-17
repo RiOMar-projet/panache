@@ -10,21 +10,6 @@ so the sensitivity difference between the two methods is immediately visible.
 
 ---
 
-## About vignette images and PyPI
-
-Documentation vignettes for Python packages **do not need to compile on the
-user's system.** The images shown here are pre-rendered on the authors'
-machines and committed to the repository as static assets. When Sphinx builds
-the documentation site, it simply embeds them. Users can read the vignette
-without having satellite data or a bathymetry file available locally.
-
-This is standard practice for scientific Python packages whose inputs are
-large or geographically specific datasets (e.g. xarray, cartopy, ESMValTool).
-The [Adding your own outputs](#adding-your-own-outputs) section below describes
-how to add your own pre-rendered maps to this page.
-
----
-
 ## 1. Prepare a config file
 
 Create a JSON config that points `panache` at your data. The simplest approach
@@ -274,21 +259,3 @@ in no plume detected — a physically meaningful result rather than an error.
 :::
 ::::
 
----
-
-## Adding your own outputs
-
-To add pre-rendered outputs from your own runs:
-
-1. Run `panache` on your data and locate the output PNGs in `<output_dir>/MAPS/`.
-2. Copy representative images to `docs/_static/images/vignette/`.
-3. Reference them in this file using:
-   ````
-   ```{image} _static/images/vignette/my_example.png
-   :alt: Description
-   :width: 100%
-   ```
-   ````
-4. Rebuild locally: `sphinx-build -b html docs docs/_build/html`
-5. Commit the images and updated markdown, then push to `main`. The GitHub
-   Actions workflow redeploys the site automatically.
