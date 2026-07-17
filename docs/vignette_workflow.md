@@ -89,6 +89,14 @@ grey `×` markers show the plume core coordinates.
 
 ## 4. Zone outputs — winter vs summer, dynamic vs p95
 
+:::{note}
+All detections below are based on a single day of satellite data. Results from
+a single day can be sensitive to transient conditions (cloud cover, storm
+resuspension, river-discharge spikes). More stable, representative plume
+statistics are obtained by running `panache` over a longer time series and
+summarising the `Results.csv` output.
+:::
+
 The four panels for each zone share the same colour scale. The plume mask
 threshold (shown in the right-panel title) differs between the dynamic and p95
 runs, illustrating how threshold choice affects the detected plume area.
@@ -261,58 +269,6 @@ in no plume detected — a physically meaningful result rather than an error.
 :::{grid-item-card} p95 threshold
 ```{image} _static/images/vignette/southern_brittany_20240701_p95.png
 :alt: Southern Brittany — 1 Jul 2024 — p95 threshold
-:width: 100%
-```
-:::
-::::
-
----
-
-### Var
-
-The Var is a small, steep-gradient Mediterranean river with a compact plume
-window. The Paillon estuary is tracked as a second river mouth in the same
-zone using custom `parameters` (rather than a `zone` preset). Because the L4
-product at 1 km resolution places only a handful of pixels within the detection
-domain, threshold sensitivity is especially pronounced here.
-
-In winter the dynamic threshold can fall very low (≈0.3 g m⁻³), at which point
-the entire near-coastal domain exceeds the threshold and the mask floods outward
-to the domain boundary. Conversely, the p95 threshold (≈1.3 g m⁻³) may exceed
-all pixels near the river mouth, giving no detection. Neither result represents
-a detection failure in the software sense — both reflect genuine ambiguity in
-the SPM signal on this particular day. In summer the p95 threshold yields a
-compact, well-constrained plume shape.
-
-**1 January 2024 — Winter**
-
-::::{grid} 2
-:::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/var_20240101_dynamic.png
-:alt: Var — 1 Jan 2024 — dynamic threshold
-:width: 100%
-```
-:::
-:::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/var_20240101_p95.png
-:alt: Var — 1 Jan 2024 — p95 threshold
-:width: 100%
-```
-:::
-::::
-
-**1 July 2024 — Summer**
-
-::::{grid} 2
-:::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/var_20240701_dynamic.png
-:alt: Var — 1 Jul 2024 — dynamic threshold
-:width: 100%
-```
-:::
-:::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/var_20240701_p95.png
-:alt: Var — 1 Jul 2024 — p95 threshold
 :width: 100%
 ```
 :::

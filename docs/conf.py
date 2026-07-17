@@ -31,6 +31,7 @@ napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
 myst_heading_anchors = 3
+myst_enable_extensions = ["colon_fence"]
 
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
