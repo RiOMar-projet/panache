@@ -546,6 +546,7 @@ def run_batch(config: RunConfig) -> Path:
 
     # --- Run tasks ---
     new_stats: list[dict] = []
+    new_masks: list[xr.DataArray] = []
     total = len(tasks)
 
     if config.nb_cores > 1:
@@ -557,14 +558,18 @@ def run_batch(config: RunConfig) -> Path:
                 status = "Skipped" if result is None else "Completed"
                 print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
                 if result is not None:
-                    new_stats.append(result)
+                    stats_dict, mask_da = result
+                    new_stats.append(stats_dict)
+                    new_masks.append(mask_da)
     else:
         for completed, task in enumerate(tasks, 1):
             input_file, result = _run_task(task)
             status = "Skipped" if result is None else "Completed"
             print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
             if result is not None:
-                new_stats.append(result)
+                stats_dict, mask_da = result
+                new_stats.append(stats_dict)
+                new_masks.append(mask_da)
 
     # --- Assemble Results.csv ---
     # When overwrite=False we merge new results with any rows already in Results.csv
@@ -588,6 +593,39 @@ def run_batch(config: RunConfig) -> Path:
 
     new_df.to_csv(results_path, index=False)
     print(f"{results_path}")
+
+    # --- Write PlumeMasks.nc ---
+    masks_path = output_dir / "PlumeMasks.nc"
+    if new_masks:
+        new_mask_da = xr.concat(new_masks, dim="time").sortby("time")
+        new_mask_da.name = "plume_mask"
+        new_mask_da.attrs = {
+            "long_name": "river plume mask",
+            "flag_values": np.array([0, 1], dtype=np.int8),
+            "flag_meanings": "no_plume plume",
+        }
+
+        if not config.overwrite and masks_path.exists():
+            try:
+                with xr.open_dataset(masks_path) as old_ds:
+                    old_times = old_ds.time.values
+                    new_times = new_mask_da.time.values
+                    keep = ~np.isin(old_times, new_times)
+                    if keep.any():
+                        merged = xr.concat(
+                            [old_ds["plume_mask"].isel(time=keep), new_mask_da],
+                            dim="time",
+                        ).sortby("time")
+                    else:
+                        merged = new_mask_da
+            except Exception as exc:
+                print(f"  Warning: could not merge existing PlumeMasks.nc: {exc}", flush=True)
+                merged = new_mask_da
+        else:
+            merged = new_mask_da
+
+        xr.Dataset({"plume_mask": merged}).to_netcdf(masks_path)
+        print(f"{masks_path}")
 
     # --- Write manifest ---
     manifest_records = [

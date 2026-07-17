@@ -1,5 +1,28 @@
 # What's New
 
+## v0.4.0 — 17 July 2026
+
+### New: PlumeMasks.nc — aggregated daily pixel masks
+
+Each `panache` run now writes a `PlumeMasks.nc` file alongside `Results.csv`
+in the output directory. The file stores the per-pixel plume mask for every
+processed day as a three-dimensional `(time, lat, lon)` array of int8 values
+(0 = no plume, 1 = plume). Days on which the area was too cloudy or no plume
+was detected are represented as all-zero slices, so the time axis covers every
+input file regardless of detection outcome.
+
+When `overwrite: false` is set and a `PlumeMasks.nc` file already exists from
+a prior run, the new batch results are merged into it by date, mirroring the
+existing `Results.csv` resume logic.
+
+This output makes it straightforward to use the detected plume footprint as a
+spatial mask on any co-registered gridded product — for example, to extract
+daily in-plume SPM concentration distributions from the original Sextant files
+without re-running the detection algorithm. See the new **Using PlumeMasks.nc**
+vignette on the documentation site for a worked example.
+
+---
+
 ## v0.3.5 — 17 July 2026
 
 ### Bug fix: static threshold pipeline accessing non-existent dynamic arguments

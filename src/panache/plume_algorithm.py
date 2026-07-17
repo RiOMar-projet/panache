@@ -1958,6 +1958,23 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
 #### Main function
 # =============================================================================
 
+
+def _mask_with_time(mask, ds_reduced):
+    """Return *mask* as an int8 DataArray with a scalar ``time`` dimension.
+
+    Parameters
+    ----------
+    mask : xr.DataArray or None
+        Boolean plume mask at reduced resolution. ``None`` produces an
+        all-False mask matching ``ds_reduced``.
+    ds_reduced : xr.DataArray
+        Reduced-resolution SPM map; supplies coordinates and ``date_for_plot``.
+    """
+    base = xr.zeros_like(ds_reduced, dtype=bool) if mask is None else mask.astype(bool).copy()
+    time_val = pd.to_datetime(ds_reduced.date_for_plot.values)
+    return base.expand_dims({"time": [time_val]}).astype(np.int8)
+
+
 def main_process(file_name,
                  parameters,
                  bathy_data_aligned,
@@ -2049,7 +2066,7 @@ def main_process(file_name,
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
 
-        return data_to_return
+        return data_to_return, _mask_with_time(None, ds_reduced)
 
     # Loop through each plume starting point to process plume detection
     for plume_name, starting_point in parameters['starting_points'].items():
@@ -2090,17 +2107,21 @@ def main_process(file_name,
 
         data_to_return = return_stats_dictionnary(None, ds_reduced, ds, parameters,
                                                   thresholds, return_empty_dict = True)
+        mask_out = _mask_with_time(None, ds_reduced)
 
         del all_mask_area
         gc.collect()
 
-        return data_to_return
+        return data_to_return, mask_out
 
     # Combine all detected plume areas using logical OR
     final_mask_area = reduce(np.logical_or, all_mask_area)
 
     # Calculate statistics
     data_to_return = return_stats_dictionnary(final_mask_area, ds_reduced, ds, parameters, thresholds)
+
+    # Build mask output before the DataArray is deleted
+    mask_out = _mask_with_time(final_mask_area, ds_reduced)
 
     # Plot the final map with the plume area
     make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
@@ -2123,7 +2144,7 @@ def main_process(file_name,
     del final_mask_area, all_mask_area
     gc.collect()
 
-    return data_to_return
+    return data_to_return, mask_out
 
 
 # =============================================================================

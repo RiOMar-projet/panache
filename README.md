@@ -15,7 +15,7 @@ As input it takes a list of NetCDF files, a bathymetry mask, and a JSON run conf
 - 🗺️ Uses bathymetry mask for both land masking and cloud-coverage screening
 - ⚙️ Runs from one explicit JSON config with no hidden folder assumptions
 - 🚀 Supports single-core or multi-core batch processing
-- 📊 Produces CSV statistics, plume masks, PNG maps, and an animated GIF
+- 📊 Produces CSV statistics, a daily mask NetCDF, PNG maps, and an animated GIF
 - 🧭 Works with built-in zone presets or fully custom plume parameters
 
 ## 📦 Installation
@@ -87,6 +87,7 @@ Each run writes its results into the configured `output_dir`:
 ```text
 panache-output/
 ├── Results.csv
+├── PlumeMasks.nc
 ├── manifest.csv
 ├── GIF.gif          (when gif: true)
 └── MAPS/
@@ -96,6 +97,7 @@ panache-output/
 | Output | Description |
 | --- | --- |
 | `Results.csv` | Batch-level plume statistics sorted by date, one row per input file. |
+| `PlumeMasks.nc` | Aggregated daily plume masks: a `(time, lat, lon)` int8 array covering every processed day (0 = no plume, 1 = plume). |
 | `manifest.csv` | Record of every input file seen in this run and its status (`Completed`, `Skipped`, `Failed`). Used to resume interrupted runs when `overwrite: false`. |
 | `GIF.gif` | Animated preview assembled from all generated plume maps (optional). |
 | `MAPS/*.png` | One rendered plume map per processed input file. |

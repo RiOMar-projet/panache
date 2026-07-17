@@ -7,5 +7,6 @@
 
 news
 vignette_workflow
+vignette_masks
 api
 ```
