@@ -1,5 +1,43 @@
 # What's New
 
+## v0.3.5 — 17 July 2026
+
+### Bug fix: static threshold pipeline accessing non-existent dynamic arguments
+
+When `dynamic_threshold: false`, the pipeline in `runner.py` was still attempting
+to read per-plume near-mouth threshold bounds that are only computed during a
+dynamic-threshold run, raising a `KeyError` on any static-threshold batch.
+The call has been removed from the static path and the corresponding dead branch
+in `plume_algorithm.py` has been pruned.
+
+### Bug fix: date parsed from filename before internal NetCDF metadata
+
+`io.py` now extracts the scene date from the filename first and falls back to
+the `time` coordinate inside the NetCDF only when no date is recoverable from
+the name. This fixes processing of the full 2005 Sextant SPM archive, where an
+upstream data error caused every file's internal `time` coordinate to reference
+an incorrect date while the filename remained correct.
+
+### Documentation site: workflow vignette
+
+A new Workflow Vignette page has been added to the documentation site, showing
+real L4 SPM plume-detection outputs for 1 January 2024 (winter) and 1 July 2024
+(summer) across all four built-in zones (Bay of Seine, Bay of Biscay, Gulf of
+Lion, Southern Brittany). Each zone is illustrated under both the dynamic
+gradient-based threshold and the global p95 threshold, placed side by side using
+two-column card layouts so the sensitivity difference between the two methods is
+immediately visible.
+
+### Documentation site: theme switcher, README-driven index, codecov badge
+
+The documentation site has been updated with a light/dark theme toggle in the
+top navigation bar. The main landing page now mirrors the project README exactly,
+so any update to the README is automatically reflected on the site. The Codecov
+coverage badge is displayed on both the README and the documentation landing
+page.
+
+---
+
 ## v0.3.x — July 2026
 
 ### Stable release: four zones tested end-to-end
