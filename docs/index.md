@@ -6,6 +6,6 @@
 :hidden:
 
 news
-vignette
+vignette_workflow
 api
 ```
