@@ -50,6 +50,15 @@ def infer_primary_variable(dataset: xr.Dataset, variable_name: str | None = None
 
 
 def _extract_date_for_plot(data_array: xr.DataArray, source_path: str) -> pd.Timestamp:
+    # Filename date (YYYYMMDD) is tried first: it is always authoritative for
+    # SEXTANT and similar products whose NetCDF time-unit reference epoch can
+    # be corrupt (e.g. SEXTANT 2005 files carry "seconds since 1981-01-01"
+    # instead of "seconds since 1998-01-01", which shifts decoded dates by
+    # 17 years).
+    match = re.search(r"(\d{8})", Path(source_path).name)
+    if match:
+        return pd.to_datetime(match.group(1), format="%Y%m%d")
+
     if "time" in data_array.coords and data_array.coords["time"].size:
         return pd.to_datetime(data_array.coords["time"].values[0])
 
@@ -58,10 +67,6 @@ def _extract_date_for_plot(data_array: xr.DataArray, source_path: str) -> pd.Tim
         date_text = str(attrs["start_date"]).replace(" UTC", "")
         time_text = str(attrs.get("start_time", "00:00:00 UTC")).replace(" UTC", "")
         return pd.to_datetime(f"{date_text} {time_text}", errors="coerce")
-
-    match = re.search(r"(\d{8})", Path(source_path).name)
-    if match:
-        return pd.to_datetime(match.group(1), format="%Y%m%d")
 
     return pd.Timestamp(Path(source_path).stat().st_mtime, unit="s")
 
