@@ -29,12 +29,14 @@ autodoc_default_options = {
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
+myst_heading_anchors = 3
+
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
 html_theme_options = {
     "github_url": "https://github.com/RiOMar-projet/panache",
     "show_toc_level": 2,
-    "navbar_end": ["navbar-icon-links"],
+    "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "icon_links": [
         {
             "name": "PyPI",

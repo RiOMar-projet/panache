@@ -1,0 +1,11 @@
+```{include} ../README.md
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+
+news
+vignette
+api
+```
