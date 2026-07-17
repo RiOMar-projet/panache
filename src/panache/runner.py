@@ -32,7 +32,6 @@ from .plume_algorithm import (
     derive_masks_from_bathymetry,
     find_the_index_of_the_plume_starting_point,
     main_process,
-    reduce_resolution,
 )
 
 _GLOB_CHARS = frozenset("*?[")
@@ -86,29 +85,81 @@ def _skip_empty_file_message(input_file: str | Path) -> str:
     return f"Skipping {Path(input_file).name}: file contains no finite data values."
 
 
-def _load_first_valid_map_data(
+def _scene_date_str(ds: xr.DataArray) -> str:
+    return pd.Timestamp(ds.date_for_plot.values).strftime("%Y-%m-%d")
+
+
+def _load_all_scenes(
     input_files: list[Path],
     parameters: dict,
     variable_name: str | None,
-) -> tuple[xr.DataArray, list[Path]]:
-    skipped_files = []
-    for input_file in input_files:
+) -> tuple[list[Path], dict[str, xr.DataArray]]:
+    """Load every input file exactly once, up front, and keep it resident in memory.
+
+    The returned ``scenes`` dict (keyed by ``str(path)``) is reused for the
+    threshold/colour-limit pre-computation pass and for the per-scene plume
+    detection dispatch further down in ``run_batch``, so no file is read from
+    disk more than once for the whole run.
+
+    Before loading beyond the first valid file, prints the native grid
+    resolution and an estimate of the RAM required for the full batch, and,
+    when psutil is available, raises ``MemoryError`` if that estimate exceeds
+    what's free.
+    """
+    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
+    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
+
+    n = len(input_files)
+    n_digits = len(str(n))
+    valid_files: list[Path] = []
+    scenes: dict[str, xr.DataArray] = {}
+
+    for i, input_file in enumerate(input_files, 1):
+        print(
+            f"\r  Loading [{i:{n_digits}d}/{n}] ({100 * i // n:3d}%)  {input_file.name:<50}",
+            end="",
+            flush=True,
+        )
         try:
-            dataset = load_map_data(
-                input_file,
-                lon_range=coordinate_range_bounds(parameters["lon_range_of_plume_area"]),
-                lat_range=coordinate_range_bounds(parameters["lat_range_of_plume_area"]),
-                variable_name=variable_name,
+            da = load_map_data(
+                input_file, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name
             )
         except NoValidMapDataError:
+            print(flush=True)
             print(_skip_empty_file_message(input_file), flush=True)
-            skipped_files.append(input_file)
             continue
 
-        valid_input_files = [path for path in input_files if path not in skipped_files]
-        return dataset, valid_input_files
+        if not scenes:
+            native_lat_res = float(np.diff(da.lat.values).mean())
+            native_lon_res = float(np.diff(da.lon.values).mean())
+            print(flush=True)
+            print(
+                f"Native data resolution: {native_lat_res:.5f}° lat × {native_lon_res:.5f}° lon",
+                flush=True,
+            )
+            bytes_needed = n * da.size * 8  # float64 worst case
+            gb_needed = bytes_needed / 1e9
+            print(f"Estimated peak RAM to load all files: {gb_needed:.2f} GB", flush=True)
+            if _HAS_PSUTIL:
+                available_gb = psutil.virtual_memory().available / 1e9
+                print(f"Available RAM:                        {available_gb:.2f} GB", flush=True)
+                if bytes_needed > psutil.virtual_memory().available:
+                    raise MemoryError(
+                        f"Insufficient RAM to load all input files into memory: need "
+                        f"~{gb_needed:.1f} GB but only {available_gb:.1f} GB is available."
+                    )
+            else:
+                print("  (Install psutil to enable automatic RAM availability check.)", flush=True)
 
-    raise NoValidMapDataError("No input files contained finite data values.")
+        scenes[str(input_file)] = da
+        valid_files.append(input_file)
+
+    print(flush=True)
+
+    if not scenes:
+        raise NoValidMapDataError("No input files contained finite data values.")
+
+    return valid_files, scenes
 
 
 def _load_boundary(boundary_path: Path | None):
@@ -120,64 +171,20 @@ def _load_boundary(boundary_path: Path | None):
 
 
 def compute_global_threshold(
-    input_files: list[Path],
-    parameters: dict,
-    variable_name: str | None,
+    scenes: dict[str, xr.DataArray],
     quantile: float,
-    sample_ds: xr.DataArray,
 ) -> tuple[float, tuple[float, float]]:
     """Compute the SPM quantile threshold and colourbar limits from the full input dataset.
 
-    Loads every file in the bbox crop once, concatenates all finite values, and
-    returns ``(threshold, (vmin, vmax))``.  Before loading, prints an estimate of
-    the RAM required and, when psutil is available, checks that sufficient memory
-    is free.
+    ``scenes`` holds every already-loaded scene for the batch; no file I/O happens here.
     """
-    n = len(input_files)
-    n_pixels = sample_ds.size
-    bytes_needed = n * n_pixels * 8  # float64 worst case
-    gb_needed = bytes_needed / 1e9
+    print(
+        f"\nComputing global SPM threshold ({quantile:.0%}-ile) and colourbar limits "
+        f"from {len(scenes)} scenes.",
+        flush=True,
+    )
 
-    print(f"\nComputing global SPM threshold ({quantile:.0%}-ile) and colourbar limits from {n} files.")
-
-    if _HAS_PSUTIL:
-        if bytes_needed > psutil.virtual_memory().available:
-            available_gb = psutil.virtual_memory().available / 1e9
-            raise MemoryError(
-                f"Insufficient RAM to compute global threshold: need ~{gb_needed:.1f} GB "
-                f"but only {available_gb:.1f} GB is available. "
-                f"Set 'spm_threshold' in your config to provide a fixed value and skip "
-                f"pre-computation."
-            )
-
-    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
-    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
-    n_digits = len(str(n))
-    all_values: list[np.ndarray] = []
-
-    for i, path in enumerate(input_files, 1):
-        print(
-            f"\r  Loading [{i:{n_digits}d}/{n}] ({100 * i // n:3d}%)  {path.name:<50}",
-            end="",
-            flush=True,
-        )
-        try:
-            da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
-            all_values.append(da.values.ravel())
-        except NoValidMapDataError:
-            continue
-        except Exception as exc:
-            print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
-            continue
-
-    print(flush=True)  # newline after progress line
-
-    if not all_values:
-        raise ValueError(
-            "No valid data found across all input files — cannot compute global threshold."
-        )
-
-    combined = np.concatenate(all_values)
+    combined = np.concatenate([da.values.ravel() for da in scenes.values()])
     threshold = float(np.nanquantile(combined, quantile))
     finite = combined[np.isfinite(combined) & (combined > 0)]
     if finite.size > 0:
@@ -190,62 +197,21 @@ def compute_global_threshold(
     return threshold, (vmin, vmax)
 
 
-def compute_global_colour_limits(
-    input_files: list[Path],
-    parameters: dict,
-    variable_name: str | None,
-    sample_ds: xr.DataArray,
-) -> tuple[float, float]:
+def compute_global_colour_limits(scenes: dict[str, xr.DataArray]) -> tuple[float, float]:
     """Compute vmin/vmax for the colourbar from the full input dataset.
 
     Returns (vmin, vmax) where vmin >= 0.1 and vmax >= 1.0, derived from the
-    5th and 95th percentiles of all finite values across the bbox and all time steps.
+    5th and 95th percentiles of all finite positive values across all loaded scenes.
+    ``scenes`` holds every already-loaded scene for the batch; no file I/O happens here.
     """
-    n = len(input_files)
-    n_digits = len(str(n))
-    n_pixels = sample_ds.size
-    bytes_needed = n * n_pixels * 8
-    gb_needed = bytes_needed / 1e9
+    print(f"\nComputing global colourbar limits from {len(scenes)} scenes.", flush=True)
 
-    print(f"\nComputing global colourbar limits from {n} files.", flush=True)
+    all_values = []
+    for da in scenes.values():
+        vals = da.values.ravel()
+        all_values.append(vals[np.isfinite(vals) & (vals > 0)])
 
-    if _HAS_PSUTIL:
-        available_gb = psutil.virtual_memory().available / 1e9
-        if bytes_needed > psutil.virtual_memory().available:
-            print(
-                f"  Warning: insufficient RAM ({gb_needed:.1f} GB needed, "
-                f"{available_gb:.1f} GB available). Falling back to first-file colour limits.",
-                flush=True,
-            )
-            vals = sample_ds.values.ravel()
-            finite = vals[np.isfinite(vals) & (vals > 0)]
-            if finite.size == 0:
-                return 0.1, 1.0
-            return float(max(np.nanmin(finite), 0.1)), float(max(np.nanquantile(finite, 0.95), 1.0))
-
-    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
-    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
-    all_values: list[np.ndarray] = []
-
-    for i, path in enumerate(input_files, 1):
-        print(
-            f"\r  [{i:{n_digits}d}/{n}] {path.name:<60}",
-            end="",
-            flush=True,
-        )
-        try:
-            da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
-            vals = da.values.ravel()
-            all_values.append(vals[np.isfinite(vals) & (vals > 0)])
-        except NoValidMapDataError:
-            continue
-        except Exception as exc:
-            print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
-            continue
-
-    print(flush=True)
-
-    if not all_values:
+    if not any(v.size for v in all_values):
         return 0.1, 1.0
 
     combined = np.concatenate(all_values)
@@ -256,58 +222,37 @@ def compute_global_colour_limits(
 
 
 def _compute_dynamic_threshold_data(
-    input_files: list[Path],
-    parameters: dict,
-    variable_name: str | None,
+    scenes: dict[str, xr.DataArray],
     pixel_starts: dict[str, tuple[int, int]],
     land_mask_values: np.ndarray,
     lower_quantile: float,
     upper_quantile: float,
-    lat_new_resolution: float | None,
-    lon_new_resolution: float | None,
     radius_pixels: int = 15,
 ) -> tuple[dict[str, tuple[float, float]], tuple[float, float]]:
-    """Load the full file stack to compute near-mouth threshold bounds and colour limits.
+    """Compute near-mouth threshold bounds and colour limits from the full scene stack.
 
-    A single pass over all input files accumulates near-mouth SPM samples for each
-    plume in ``pixel_starts`` and colour-limit values from the full bbox.  Each file
-    is reduced to the run resolution (if configured) so that the pixel indices in
-    ``pixel_starts`` remain valid.
+    A single pass over every already-loaded scene accumulates near-mouth SPM samples
+    for each plume in ``pixel_starts`` and colour-limit values from the full bbox.
+    ``scenes`` holds every already-loaded scene for the batch; no file I/O happens here.
 
     Returns
     -------
     bounds : dict mapping plume name → (minimal_threshold, maximal_threshold)
     colour_limits : (vmin, vmax)
     """
-    n = len(input_files)
+    n = len(scenes)
     n_digits = len(str(n))
-    lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
-    lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])
 
     plume_samples: dict[str, list[np.ndarray]] = {name: [] for name in pixel_starts}
     colour_values: list[np.ndarray] = []
 
     print(
-        f"\nLoading {n} files to estimate near-mouth threshold bounds and colour limits...",
+        f"\nEstimating near-mouth threshold bounds and colour limits from {n} scenes...",
         flush=True,
     )
 
-    for i, path in enumerate(input_files, 1):
-        print(
-            f"\r  [{i:{n_digits}d}/{n}] {path.name:<60}",
-            end="",
-            flush=True,
-        )
-        try:
-            da = load_map_data(path, lon_range=lon_range, lat_range=lat_range, variable_name=variable_name)
-        except NoValidMapDataError:
-            continue
-        except Exception as exc:
-            print(f"\n  Warning: could not load {path.name}: {exc}", flush=True)
-            continue
-
-        if lat_new_resolution is not None or lon_new_resolution is not None:
-            da = reduce_resolution(da, lat_new_resolution, lon_new_resolution)
+    for i, da in enumerate(scenes.values(), 1):
+        print(f"\r  [{i:{n_digits}d}/{n}]", end="", flush=True)
 
         vals = da.values
         rows, cols = vals.shape
@@ -372,13 +317,13 @@ def _write_manifest(output_dir: Path, records: list[dict]) -> None:
 
 
 def _run_task(task):
-    input_file = task[0]
+    date_str = _scene_date_str(task[1])
     try:
         result = main_process(*task)
     except Exception as exc:
-        print(f"\nError processing {Path(input_file).name}: {exc}", flush=True)
+        print(f"\nError processing {date_str}: {exc}", flush=True)
         result = None
-    return input_file, result
+    return date_str, result
 
 
 def run_batch(config: RunConfig) -> Path:
@@ -394,47 +339,16 @@ def run_batch(config: RunConfig) -> Path:
     coast_boundary = _load_boundary(config.coast_shapefile)
     parameters = config.parameters
 
-    ds, input_files = _load_first_valid_map_data(input_files, parameters, config.variable_name)
+    try:
+        input_files, scenes = _load_all_scenes(input_files, parameters, config.variable_name)
+    except MemoryError as exc:
+        raise SystemExit(f"[panache] {exc}") from exc
 
-    native_lat_res = float(np.diff(ds.lat.values).mean())
-    native_lon_res = float(np.diff(ds.lon.values).mean())
-    print(f"Native data resolution: {native_lat_res:.5f}° lat × {native_lon_res:.5f}° lon", flush=True)
+    ds = scenes[str(input_files[0])]
 
-    n_files = len(input_files)
-    bytes_needed = n_files * ds.size * 8  # float64 worst case
-    gb_needed = bytes_needed / 1e9
-    print(f"Estimated peak RAM to load all files: {gb_needed:.2f} GB", flush=True)
-    if _HAS_PSUTIL:
-        available_gb = psutil.virtual_memory().available / 1e9
-        print(f"Available RAM:                        {available_gb:.2f} GB", flush=True)
-    else:
-        print("  (Install psutil to enable automatic RAM availability check.)", flush=True)
-
-    if config.lat_new_resolution is not None or config.lon_new_resolution is not None:
-        target_lat = config.lat_new_resolution or native_lat_res
-        target_lon = config.lon_new_resolution or native_lon_res
-        lat_factor = round(target_lat / native_lat_res)
-        lon_factor = round(target_lon / native_lon_res)
-        print(
-            f"Regridding to {target_lat:.5f}° lat × {target_lon:.5f}° lon "
-            f"(every {lat_factor} lat pixel(s) and {lon_factor} lon pixel(s) averaged into one).",
-            flush=True,
-        )
-
-    ds_reduced = (
-        reduce_resolution(ds, config.lat_new_resolution, config.lon_new_resolution)
-        if config.lat_new_resolution is not None
-        else ds
-    )
-
-    bathymetry = align_bathymetry_to_resolution(ds_reduced, str(config.bathymetry_path))
-    input_bathymetry = align_bathymetry_to_resolution(ds, str(config.bathymetry_path))
-    inside_polygon_mask = create_polygon_mask(ds_reduced, parameters)
-    cloud_check_water_mask, land_mask = derive_masks_from_bathymetry(
-        input_bathymetry,
-        bathymetry,
-        parameters,
-    )
+    bathymetry = align_bathymetry_to_resolution(ds, str(config.bathymetry_path))
+    inside_polygon_mask = create_polygon_mask(ds, parameters)
+    cloud_check_water_mask, land_mask = derive_masks_from_bathymetry(bathymetry, parameters)
 
     # Inject run-level quantile settings so determine_SPM_threshold can read them
     # via self.parameters without threading them through every function signature.
@@ -443,7 +357,7 @@ def run_batch(config: RunConfig) -> Path:
 
     # --- Pre-compute near-mouth threshold bounds (once per batch) ---
     # When dynamic_threshold is active and a plume's minimal/maximal_threshold is
-    # None, estimate it from the full file stack so values are stable across the
+    # None, estimate it from the full scene stack so values are stable across the
     # entire batch rather than re-derived per scene.
     precomputed_threshold: float | None = None
     global_colour_limits: tuple[float, float] | None = None
@@ -452,22 +366,18 @@ def run_batch(config: RunConfig) -> Path:
         lower_q = config.near_mouth_lower_quantile
         upper_q = config.near_mouth_upper_quantile
         pixel_starts = {
-            plume_name: find_the_index_of_the_plume_starting_point(ds_reduced, starting_point)
+            plume_name: find_the_index_of_the_plume_starting_point(ds, starting_point)
             for plume_name, starting_point in parameters['starting_points'].items()
             if (parameters['minimal_threshold'][plume_name] is None
                 or parameters['maximal_threshold'][plume_name] is None)
         }
         if pixel_starts:
             bounds, global_colour_limits = _compute_dynamic_threshold_data(
-                input_files,
-                parameters,
-                config.variable_name,
+                scenes,
                 pixel_starts,
                 land_mask.values,
                 lower_q,
                 upper_q,
-                config.lat_new_resolution,
-                config.lon_new_resolution,
             )
             for plume_name, (minimal, maximal) in bounds.items():
                 parameters['minimal_threshold'][plume_name] = minimal
@@ -487,22 +397,14 @@ def run_batch(config: RunConfig) -> Path:
         elif config.global_threshold_quantile is not None:
             try:
                 precomputed_threshold, global_colour_limits = compute_global_threshold(
-                    input_files,
-                    parameters,
-                    config.variable_name,
-                    config.global_threshold_quantile,
-                    ds,
+                    scenes, config.global_threshold_quantile,
                 )
-            except MemoryError as exc:
-                raise SystemExit(f"[panache] {exc}") from exc
             except ValueError as exc:
                 raise SystemExit(f"[panache] {exc}") from exc
 
     # --- Compute global colourbar limits (skipped when already derived above) ---
     if global_colour_limits is None:
-        global_colour_limits = compute_global_colour_limits(
-            input_files, parameters, config.variable_name, ds
-        )
+        global_colour_limits = compute_global_colour_limits(scenes)
 
     # --- Build task list, honouring overwrite=False via manifest + PNG check ---
     prior_processed = _read_manifest(output_dir) if not config.overwrite else set()
@@ -528,6 +430,7 @@ def run_batch(config: RunConfig) -> Path:
         tasks.append(
             (
                 str(input_file),
+                scenes[str(input_file)],
                 parameters,
                 bathymetry,
                 cloud_check_water_mask,
@@ -536,11 +439,8 @@ def run_batch(config: RunConfig) -> Path:
                 str(output_stem),
                 config.dynamic_threshold,
                 coast_boundary,
-                config.variable_name,
                 precomputed_threshold,
                 global_colour_limits,
-                config.lat_new_resolution,
-                config.lon_new_resolution,
             )
         )
 
@@ -552,20 +452,20 @@ def run_batch(config: RunConfig) -> Path:
     if config.nb_cores > 1:
         multiprocess.set_start_method('spawn', force=True)
         with multiprocess.Pool(config.nb_cores) as pool:
-            for completed, (input_file, result) in enumerate(
+            for completed, (date_str, result) in enumerate(
                 pool.imap_unordered(_run_task, tasks), 1
             ):
                 status = "Skipped" if result is None else "Completed"
-                print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
+                print(f"[{completed}/{total}] {status} {date_str}", flush=True)
                 if result is not None:
                     stats_dict, mask_da = result
                     new_stats.append(stats_dict)
                     new_masks.append(mask_da)
     else:
         for completed, task in enumerate(tasks, 1):
-            input_file, result = _run_task(task)
+            date_str, result = _run_task(task)
             status = "Skipped" if result is None else "Completed"
-            print(f"[{completed}/{total}] {status} {Path(input_file).name}", flush=True)
+            print(f"[{completed}/{total}] {status} {date_str}", flush=True)
             if result is not None:
                 stats_dict, mask_da = result
                 new_stats.append(stats_dict)

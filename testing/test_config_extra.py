@@ -23,8 +23,6 @@ from panache.config import (
 
 def _minimal_raw_params(plume_name="Test"):
     return {
-        "lon_new_resolution": 0.015,
-        "lat_new_resolution": 0.015,
         "searching_strategies": {plume_name: "northward_fan"},
         "bathymetric_threshold": 0,
         "starting_points": {plume_name: [1.0, 2.0]},
@@ -259,8 +257,6 @@ class LoadRunConfigTests(unittest.TestCase):
                 "dynamic_threshold": True,
                 "near_mouth_lower_quantile": 0.1,
                 "near_mouth_upper_quantile": 0.9,
-                "lat_new_resolution": 0.05,
-                "lon_new_resolution": 0.05,
                 "variable_name": "SPM",
                 "zone": "BAY_OF_SEINE",
             }
@@ -269,7 +265,6 @@ class LoadRunConfigTests(unittest.TestCase):
             self.assertEqual(cfg.nb_cores, 4)
             self.assertTrue(cfg.dynamic_threshold)
             self.assertAlmostEqual(cfg.near_mouth_lower_quantile, 0.1)
-            self.assertAlmostEqual(cfg.lat_new_resolution, 0.05)
 
 
 if __name__ == "__main__":

@@ -33,11 +33,11 @@ python -m unittest testing/test_searching_strategy_presets.py
 The smoke test runs the full pipeline on synthetic data (no real NetCDF files needed):
 
 ```bash
-python testing/smoke_test_module.py
-python testing/smoke_test_module.py --with-plots   # also generates PNG/GIF outputs
+python testing/smoke_tests/smoke_test_module.py
+python testing/smoke_tests/smoke_test_module.py --with-plots   # also generates PNG/GIF outputs
 ```
 
-The integration scripts `testing/test_single_file_plume.py` and `testing/test_batch_plume.py` require real SPM NetCDF data from a local `pCloudDrive` path and are not intended for CI.
+The integration scripts `testing/smoke_tests/test_single_file_plume.py` and `testing/smoke_tests/test_batch_plume.py` require real SPM NetCDF data from a local `pCloudDrive` path and are not intended for CI.
 
 ## Publishing to PyPI
 
@@ -77,9 +77,10 @@ src/panache/
 ### Data flow
 
 1. `load_run_config` parses JSON → `RunConfig`. A config must specify either `zone` (resolved via `define_parameters` in `utils.py`) or explicit `parameters`. Both paths produce the same parameter dict structure.
-2. `run_batch` discovers input `.nc` files (glob, single file, or directory recursion), loads the first valid file to derive grid geometry, aligns bathymetry to that grid, and builds shared masks.
-3. Each file is dispatched to `main_process` in `plume_algorithm.py`, either sequentially or via `multiprocess.Pool`. `main_process` writes a `*_plume_mask.png` per file and returns a stats dict in memory.
-4. After all files are processed, `run_batch` assembles all returned dicts and writes a single `Results.csv`. A `manifest.csv` listing each input file and its processing status is also written.
+2. `run_batch` discovers input `.nc` files (glob, single file, or directory recursion), then `_load_all_scenes` loads every valid file into memory exactly once, keyed by path in a `scenes` dict. The first loaded scene derives grid geometry and aligns bathymetry (`align_bathymetry_to_resolution`); `derive_masks_from_bathymetry` builds the shared `cloud_check_water_mask` / `land_mask` from that one aligned bathymetry array.
+3. When `dynamic_threshold` or `global_threshold_quantile` is set, the SPM threshold and colourbar limits are computed from the same in-memory `scenes` dict (`_compute_dynamic_threshold_data`, `compute_global_threshold`, `compute_global_colour_limits`) — no file is re-read from disk for this step.
+4. Each scene is dispatched to `main_process` in `plume_algorithm.py` together with its already-loaded `xr.DataArray`, either sequentially or via `multiprocess.Pool`. `main_process` never touches the filesystem itself; it writes a `<stem>.png` per scene and returns `(stats_dict, mask_DataArray)` in memory. Every input file is read from disk exactly once per run, regardless of `nb_cores`.
+5. After all scenes are processed, `run_batch` assembles the returned stats dicts into `Results.csv` and the returned masks into `PlumeMasks.nc` (see Output structure below). A `manifest.csv` listing each input file and its processing status is also written.
 
 ### Config modes
 
@@ -125,13 +126,16 @@ Stored as a pickled `xr.DataArray`. If the pickle does not exist at the configur
 ```
 <output_dir>/
 ├── Results.csv          — one row per input file, assembled in memory at run end
+├── PlumeMasks.nc        — (time, lat, lon) int8 array of per-scene plume masks, assembled in memory at run end
 ├── manifest.csv         — input_file + status for every file seen in this run
 ├── GIF.gif              (optional, when gif: true)
 └── MAPS/
     └── <stem>.png       — per-timestep comparison map
 ```
 
-`overwrite: false` skips any file whose `<stem>.png` already exists or whose path appears in `manifest.csv` from a prior run. On resume, prior rows in `Results.csv` are merged with new rows by date to produce the final output.
+`overwrite: false` skips any file whose `<stem>.png` already exists or whose path appears in `manifest.csv` from a prior run. On resume, prior rows in `Results.csv` and prior time slices in `PlumeMasks.nc` are merged with new ones by date to produce the final output.
+
+`_mask_with_time` (in `plume_algorithm.py`) drops the transient `date_for_plot` scalar coordinate before returning each scene's mask, since it is superseded by the `time` coordinate assigned in the same call. This matters for the final `xr.concat` across all scenes in `run_batch`: xarray's `coords="different"` raises if a non-dimension coordinate has differing values on some scenes but is absent on others — which happened intermittently on large batches (10,000+ files) before this fix.
 
 ### Threshold resolution order
 

@@ -114,20 +114,11 @@ spm = load_map_data(
 
 ## 5. Extract in-plume SPM values
 
-The `plume_mask` grid is at the reduced resolution used by `panache` during
-detection. Align it to the native SPM grid with `interp_like` before applying
-it as a boolean mask:
+`plume_mask` is produced at the native resolution of the input SPM product, on
+the same grid as `spm` above, so it can be applied directly as a boolean mask:
 
 ```python
-import numpy as np
-
-mask_aligned = (
-    mask_day
-    .interp_like(spm, method="nearest", kwargs={"fill_value": 0})
-    .astype(bool)
-)
-
-spm_in_plume = spm.where(mask_aligned)
+spm_in_plume = spm.where(mask_day.astype(bool))
 print(f"Mean in-plume SPM: {float(spm_in_plume.mean()):0.3f} g m⁻³")
 print(f"Max  in-plume SPM: {float(spm_in_plume.max()):0.3f} g m⁻³")
 ```
@@ -165,11 +156,7 @@ for t in masks.time.values:
 
     spm = load_map_data(str(fpath), lon_range=lon_bounds, lat_range=lat_bounds,
                         variable_name="analysed_spim")
-    mask_aligned = (
-        mask_day.interp_like(spm, method="nearest", kwargs={"fill_value": 0})
-        .astype(bool)
-    )
-    vals = spm.values[mask_aligned.values]
+    vals = spm.values[mask_day.astype(bool).values]
     finite = vals[np.isfinite(vals)]
     records.append({
         "date": day,

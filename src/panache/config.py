@@ -40,8 +40,6 @@ class RunConfig:
     global_threshold_quantile: float | None = None
     near_mouth_lower_quantile: float = 0.25
     near_mouth_upper_quantile: float = 0.75
-    lat_new_resolution: float | None = None
-    lon_new_resolution: float | None = None
 
 
 def _required_bool(data: dict, key: str) -> bool:
@@ -137,6 +135,4 @@ def load_run_config(config_path: str | Path) -> RunConfig:
         global_threshold_quantile=float(raw_quantile) if raw_quantile is not None else None,
         near_mouth_lower_quantile=float(data.get("near_mouth_lower_quantile", 0.25)),
         near_mouth_upper_quantile=float(data.get("near_mouth_upper_quantile", 0.75)),
-        lat_new_resolution=float(data["lat_new_resolution"]) if data.get("lat_new_resolution") is not None else None,
-        lon_new_resolution=float(data["lon_new_resolution"]) if data.get("lon_new_resolution") is not None else None,
     )

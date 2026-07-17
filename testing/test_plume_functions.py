@@ -31,7 +31,6 @@ from panache.plume_algorithm import (
     load_and_filter_arrays,
     merge_plume_shape_with_close_shapes,
     pixels_far_from_land,
-    reduce_resolution,
     set_mask_area_values_to_False_based_on_an_index_object,
 )
 from panache.utils import searching_strategy_directions_from_presets
@@ -60,33 +59,6 @@ def _all_water(n=20):
     lat = np.linspace(0.0, 1.0, n)
     lon = np.linspace(0.0, 1.0, n)
     return _da(np.zeros((n, n), dtype=bool), lat, lon)
-
-
-# ---------------------------------------------------------------------------
-# reduce_resolution — lines 94-102
-# ---------------------------------------------------------------------------
-
-class ReduceResolutionTests(unittest.TestCase):
-
-    def test_reduces_spatial_dims(self):
-        n = 20
-        lat = np.linspace(0.0, 1.0, n)
-        lon = np.linspace(0.0, 1.0, n)
-        da = _da(np.ones((n, n)), lat, lon)
-        # bin size 2× the spacing → halve the resolution
-        spacing = float(np.diff(lat).mean())
-        result = reduce_resolution(da, spacing * 2, spacing * 2)
-        self.assertLess(result.sizes["lat"], n)
-        self.assertLess(result.sizes["lon"], n)
-
-    def test_values_are_averaged(self):
-        lat = np.linspace(0.0, 1.0, 10)
-        lon = np.linspace(0.0, 1.0, 10)
-        vals = np.arange(100, dtype=float).reshape(10, 10)
-        da = _da(vals, lat, lon)
-        spacing = float(np.diff(lat).mean())
-        result = reduce_resolution(da, spacing * 2, spacing * 2)
-        self.assertEqual(result.sizes["lat"], 5)
 
 
 # ---------------------------------------------------------------------------

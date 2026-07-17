@@ -1,6 +1,4 @@
 {
-  "lon_new_resolution": 0.015,
-  "lat_new_resolution": 0.015,
   "parameters": {
     "searching_strategies": {
       "Var": "southward_fan",

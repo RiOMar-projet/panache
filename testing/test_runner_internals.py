@@ -207,60 +207,30 @@ class ManifestTests(unittest.TestCase):
 
 class ComputeGlobalColourLimitsTests(unittest.TestCase):
 
-    def _write_nc(self, tmpdir: Path, values: np.ndarray, date: str) -> Path:
+    def _scene(self, values: np.ndarray) -> xr.DataArray:
         lat = np.linspace(0.0, 1.0, values.shape[0])
         lon = np.linspace(0.0, 1.0, values.shape[1])
-        ds = xr.Dataset(
-            {"SPM": (["time", "lat", "lon"], values[np.newaxis])},
-            coords={"time": [np.datetime64(date)], "lat": lat, "lon": lon},
-        )
-        path = tmpdir / f"map_{date}.nc"
-        ds.to_netcdf(path)
-        return path
+        return xr.DataArray(values, dims=["lat", "lon"], coords={"lat": lat, "lon": lon})
 
     def test_returns_positive_vmin_and_vmax(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            data = np.arange(1, 26, dtype=float).reshape(5, 5)
-            path = self._write_nc(d, data, "2020-01-01")
-            sample_ds = xr.DataArray(data, dims=["lat", "lon"],
-                                     coords={"lat": np.linspace(0, 1, 5),
-                                             "lon": np.linspace(0, 1, 5)})
-            params = {
-                "lat_range_of_plume_area": [0.0, 1.0],
-                "lon_range_of_plume_area": [0.0, 1.0],
-            }
-            vmin, vmax = compute_global_colour_limits(
-                [path], params, variable_name="SPM", sample_ds=sample_ds
-            )
+        data = np.arange(1, 26, dtype=float).reshape(5, 5)
+        scenes = {"a": self._scene(data)}
+        vmin, vmax = compute_global_colour_limits(scenes)
         self.assertGreater(vmin, 0.0)
         self.assertGreater(vmax, vmin)
 
-    def test_all_invalid_files_returns_defaults(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            # Write a dataset with all-NaN values
-            data = np.full((5, 5), np.nan)
-            path = self._write_nc(d, data, "2020-01-01")
-            sample_ds = xr.DataArray(np.ones((5, 5)), dims=["lat", "lon"],
-                                     coords={"lat": np.linspace(0, 1, 5),
-                                             "lon": np.linspace(0, 1, 5)})
-            params = {
-                "lat_range_of_plume_area": [0.0, 1.0],
-                "lon_range_of_plume_area": [0.0, 1.0],
-            }
-            vmin, vmax = compute_global_colour_limits(
-                [path], params, variable_name="SPM", sample_ds=sample_ds
-            )
+    def test_all_nan_scene_returns_defaults(self):
+        scenes = {"a": self._scene(np.full((5, 5), np.nan))}
+        vmin, vmax = compute_global_colour_limits(scenes)
         self.assertAlmostEqual(vmin, 0.1)
         self.assertAlmostEqual(vmax, 1.0)
 
 
 # ---------------------------------------------------------------------------
-# _load_first_valid_map_data — lines 103-106 (skip) and 111 (all-fail raise)
+# _load_all_scenes — skip-on-invalid and all-invalid raise
 # ---------------------------------------------------------------------------
 
-class LoadFirstValidMapDataTests(unittest.TestCase):
+class LoadAllScenesTests(unittest.TestCase):
 
     def _write_nc(self, tmpdir: Path, values: np.ndarray, date: str) -> Path:
         lat = np.linspace(0.0, 1.0, 5)
@@ -274,8 +244,7 @@ class LoadFirstValidMapDataTests(unittest.TestCase):
         return path
 
     def test_first_all_nan_file_is_skipped_and_second_returned(self):
-        from panache.runner import _load_first_valid_map_data
-        from panache.io import NoValidMapDataError
+        from panache.runner import _load_all_scenes
         params = {
             "lat_range_of_plume_area": [0.0, 1.0],
             "lon_range_of_plume_area": [0.0, 1.0],
@@ -284,14 +253,15 @@ class LoadFirstValidMapDataTests(unittest.TestCase):
             d = Path(tmp)
             bad_path = self._write_nc(d, np.full((5, 5), np.nan), "2020-01-01")
             good_path = self._write_nc(d, np.ones((5, 5)), "2020-01-02")
-            ds, valid = _load_first_valid_map_data([bad_path, good_path], params, variable_name="SPM")
-        # First file skipped, second returned
-        self.assertIsNotNone(ds)
+            valid, scenes = _load_all_scenes([bad_path, good_path], params, variable_name="SPM")
+        # First file skipped, second returned and resident in memory
         self.assertNotIn(bad_path, valid)
         self.assertIn(good_path, valid)
+        self.assertNotIn(str(bad_path), scenes)
+        self.assertIn(str(good_path), scenes)
 
     def test_all_nan_files_raises_no_valid_map_data_error(self):
-        from panache.runner import _load_first_valid_map_data
+        from panache.runner import _load_all_scenes
         from panache.io import NoValidMapDataError
         params = {
             "lat_range_of_plume_area": [0.0, 1.0],
@@ -302,7 +272,7 @@ class LoadFirstValidMapDataTests(unittest.TestCase):
             bad1 = self._write_nc(d, np.full((5, 5), np.nan), "2020-01-01")
             bad2 = self._write_nc(d, np.full((5, 5), np.nan), "2020-01-02")
             with self.assertRaises(NoValidMapDataError):
-                _load_first_valid_map_data([bad1, bad2], params, variable_name="SPM")
+                _load_all_scenes([bad1, bad2], params, variable_name="SPM")
 
 
 # ---------------------------------------------------------------------------
@@ -321,86 +291,19 @@ class ReadManifestCorruptFileTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# compute_global_threshold — lines 174-178, 183
-# exception branches: NoValidMapDataError skipped, generic Exception skipped,
-# and ValueError raised when all files fail
+# compute_global_threshold
 # ---------------------------------------------------------------------------
 
-class ComputeGlobalThresholdExceptionTests(unittest.TestCase):
+class ComputeGlobalThresholdTests(unittest.TestCase):
 
-    _PARAMS = {
-        "lat_range_of_plume_area": [0.0, 1.0],
-        "lon_range_of_plume_area": [0.0, 1.0],
-    }
-
-    def _sample_ds(self):
+    def test_returns_quantile_threshold_and_colour_limits(self):
+        data = np.arange(1, 26, dtype=float).reshape(5, 5)
         lat = np.linspace(0.0, 1.0, 5)
         lon = np.linspace(0.0, 1.0, 5)
-        return xr.DataArray(np.ones((5, 5)), dims=["lat", "lon"],
-                            coords={"lat": lat, "lon": lon})
-
-    def test_no_valid_map_data_error_is_skipped_and_second_file_succeeds(self):
-        """NoValidMapDataError on first file → continue (lines 174-175); second succeeds."""
-        from panache.io import NoValidMapDataError
-        from unittest.mock import patch
-        import panache.runner as runner_mod
-
-        good = self._sample_ds()
-        calls = [0]
-
-        def _side(*a, **kw):
-            calls[0] += 1
-            if calls[0] == 1:
-                raise NoValidMapDataError("all NaN")
-            return good
-
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            p1 = d / "a.nc"; p1.touch()
-            p2 = d / "b.nc"; p2.touch()
-            with patch.object(runner_mod, "load_map_data", side_effect=_side):
-                threshold, _ = compute_global_threshold(
-                    [p1, p2], self._PARAMS, None, 0.95, self._sample_ds()
-                )
+        scenes = {"a": xr.DataArray(data, dims=["lat", "lon"], coords={"lat": lat, "lon": lon})}
+        threshold, (vmin, vmax) = compute_global_threshold(scenes, 0.95)
         self.assertIsInstance(threshold, float)
-
-    def test_generic_exception_is_skipped_and_second_file_succeeds(self):
-        """Generic Exception on first file → warning + continue (lines 176-178)."""
-        from unittest.mock import patch
-        import panache.runner as runner_mod
-
-        good = self._sample_ds()
-        calls = [0]
-
-        def _side(*a, **kw):
-            calls[0] += 1
-            if calls[0] == 1:
-                raise OSError("disk error")
-            return good
-
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            p1 = d / "a.nc"; p1.touch()
-            p2 = d / "b.nc"; p2.touch()
-            with patch.object(runner_mod, "load_map_data", side_effect=_side):
-                threshold, _ = compute_global_threshold(
-                    [p1, p2], self._PARAMS, None, 0.95, self._sample_ds()
-                )
-        self.assertIsInstance(threshold, float)
-
-    def test_all_files_failing_raises_value_error(self):
-        """All files raise → ValueError (line 183)."""
-        from unittest.mock import patch
-        import panache.runner as runner_mod
-
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            p1 = d / "a.nc"; p1.touch()
-            with patch.object(runner_mod, "load_map_data", side_effect=OSError("bad")):
-                with self.assertRaises(ValueError):
-                    compute_global_threshold(
-                        [p1], self._PARAMS, None, 0.95, self._sample_ds()
-                    )
+        self.assertGreater(vmax, vmin)
 
 
 if __name__ == "__main__":

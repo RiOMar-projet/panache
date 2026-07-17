@@ -15,14 +15,9 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 import numpy as np
 import xarray as xr
 
-import pickle
-import tempfile
-from pathlib import Path
-
 from panache.plume_algorithm import (
     Create_the_plume_mask,
     Set_cloudy_regions_to_True,
-    load_and_resize_files,
 )
 from panache.utils import searching_strategy_directions_from_presets
 
@@ -338,47 +333,6 @@ class ResuspensionRemovalTests(unittest.TestCase):
         initial_len = len(plume.protocol)
         plume.remove_the_areas_with_sediment_resuspension()
         self.assertEqual(len(plume.protocol), initial_len)
-
-
-# ---------------------------------------------------------------------------
-# load_and_resize_files — lines 826-839
-# ---------------------------------------------------------------------------
-
-class LoadAndResizeFilesTests(unittest.TestCase):
-
-    def _write_pickle(self, tmpdir: Path, da: xr.DataArray, wrap_in_basin_map=False):
-        if wrap_in_basin_map:
-            payload = {"Basin_map": {"map_data": da}}
-        else:
-            payload = {"map_data": da}
-        path = tmpdir / "data.pkl"
-        with path.open("wb") as fh:
-            pickle.dump(payload, fh)
-        return path
-
-    def test_loads_and_resizes_map_data(self):
-        n = 20
-        lat = np.linspace(0.0, 1.0, n)
-        lon = np.linspace(0.0, 1.0, n)
-        da = xr.DataArray(np.ones((n, n)), dims=["lat", "lon"],
-                          coords={"lat": lat, "lon": lon})
-        spacing = float(np.diff(lat).mean())
-        with tempfile.TemporaryDirectory() as tmp:
-            path = self._write_pickle(Path(tmp), da)
-            result = load_and_resize_files((str(path), spacing * 2, spacing * 2))
-        self.assertLess(result.sizes["lat"], n)
-
-    def test_loads_from_basin_map_wrapper(self):
-        n = 20
-        lat = np.linspace(0.0, 1.0, n)
-        lon = np.linspace(0.0, 1.0, n)
-        da = xr.DataArray(np.ones((n, n)), dims=["lat", "lon"],
-                          coords={"lat": lat, "lon": lon})
-        spacing = float(np.diff(lat).mean())
-        with tempfile.TemporaryDirectory() as tmp:
-            path = self._write_pickle(Path(tmp), da, wrap_in_basin_map=True)
-            result = load_and_resize_files((str(path), spacing * 2, spacing * 2))
-        self.assertLess(result.sizes["lat"], n)
 
 
 if __name__ == "__main__":

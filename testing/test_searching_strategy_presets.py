@@ -11,8 +11,6 @@ from panache.utils import (
 
 def minimal_parameters(strategy_name="northward_fan"):
     return {
-        "lon_new_resolution": 0.015,
-        "lat_new_resolution": 0.015,
         "searching_strategies": {"Test plume": strategy_name},
         "bathymetric_threshold": 0,
         "starting_points": {"Test plume": [1.0, 2.0]},

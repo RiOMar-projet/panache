@@ -641,42 +641,5 @@ class MergeExceptBranchTests(_PipelineBase):
         self.assertTrue(results_path.exists())
 
 
-# ---------------------------------------------------------------------------
-# Resolution downsampling — covers lines 421-425 (lat/lon_new_resolution path)
-# ---------------------------------------------------------------------------
-
-class ResolutionDownsamplingTests(_PipelineBase):
-
-    def test_lat_new_resolution_triggers_regrid_message(self):
-        """
-        Setting lat_new_resolution in the config causes runner.py lines 420-430
-        (the regridding block) to execute.
-        """
-        inputs_dir = self.work_dir / "inputs_res"
-        self._write_nc_files(inputs_dir, ["2020-01-01"])
-        # Native grid spacing is 0.1°; set target to 0.2° to force regridding
-        cfg_data = {
-            "input_path": str(inputs_dir / "*.nc"),
-            "bathymetry_path": str(self.bathymetry_path),
-            "output_dir": str(self.work_dir / "out_res"),
-            "overwrite": True,
-            "gif": False,
-            "nb_cores": 1,
-            "dynamic_threshold": False,
-            "variable_name": "SPM",
-            "lat_new_resolution": 0.2,
-            "lon_new_resolution": 0.2,
-            "parameters": _base_parameters(),
-        }
-        p = self.work_dir / "cfg_res.json"
-        p.write_text(json.dumps(cfg_data))
-        with patch.object(plume_algorithm, "make_the_plot", lambda *a, **kw: None):
-            cfg = load_run_config(p)
-            run_batch(cfg)
-
-        results_path = self.work_dir / "out_res" / "Results.csv"
-        self.assertTrue(results_path.exists())
-
-
 if __name__ == "__main__":
     unittest.main()

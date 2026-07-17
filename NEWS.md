@@ -1,5 +1,47 @@
 # What's New
 
+## v0.4.1 — 17 July 2026
+
+### Performance: each input file is now read from disk exactly once
+
+Previously, a full batch run could read every input file from disk two or
+three times: once while pre-computing the SPM threshold and colourbar limits
+from the full dataset, and again inside `main_process` for each scene's
+detection pass. `runner.py` now loads every valid input file into memory a
+single time (`_load_all_scenes`), before the batch starts, and reuses that
+same in-memory `xr.DataArray` for threshold/colourbar pre-computation and for
+per-scene plume detection — including under `nb_cores > 1`, where the
+already-loaded array is handed to the worker process instead of a file path.
+
+### Breaking change: removed `lat_new_resolution` / `lon_new_resolution`
+
+The optional resolution-downsampling feature (`lat_new_resolution` and
+`lon_new_resolution` config keys, and the `reduce_resolution` coarsening step)
+has been removed. `panache` now always operates at the native resolution of
+the input product. Configs that still set these keys can simply drop them;
+they are no longer read.
+
+### Bug fix: `PlumeMasks.nc` assembly crash on large batches
+
+Assembling `PlumeMasks.nc` at the end of a run could raise
+`ValueError: 'date_for_plot' not present in all datasets and coords='different'`
+on large batches (observed on a 10,000+ file run). Each scene's mask carried a
+`date_for_plot` scalar coordinate left over from the source SPM map, which is
+redundant with the `time` coordinate assigned to the mask itself; xarray's
+`xr.concat` only complains when that coordinate has differing values on some
+scenes and is absent on others, which is data-dependent and did not surface on
+small test batches. `_mask_with_time` now drops `date_for_plot` from every
+scene's mask before it is returned, so the coordinate can never reach the
+final `xr.concat`.
+
+### Per-scene log messages now report the scene date, not the input filename
+
+Batch progress lines (`[n/N] Completed ...`) and the "too cloudy" / "no plume
+detected" skip messages now print the scene's date (e.g. `2024-01-01`) rather
+than the input file's name.
+
+---
+
 ## v0.4.0 — 17 July 2026
 
 ### New: PlumeMasks.nc — aggregated daily pixel masks

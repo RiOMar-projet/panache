@@ -1,7 +1,7 @@
 """
 Unit tests for panache.plume_algorithm utility functions.
 
-Functions that require file I/O (load_and_resize_files, load_and_filter_arrays),
+Functions that require file I/O (load_and_filter_arrays),
 Matplotlib rendering (make_the_plot), or the full detection pipeline
 (main_process, Pipeline_to_delineate_the_plume, Create_the_plume_mask) are
 covered by the smoke test rather than here.
@@ -29,7 +29,6 @@ from panache.plume_algorithm import (
     haversine,
     identify_the_shape_label_corresponding_to_the_plume,
     last_true_block,
-    reduce_resolution,
     return_stats_dictionnary,
 )
 
@@ -616,12 +615,11 @@ class DeriveMasksFromBathymetryTests(unittest.TestCase):
             [-10, -20, -30, -40, -50],
         ], dtype=float)
         full_bathy = self._bathy_da(data, lat, lon)
-        reduced_bathy = self._bathy_da(data, lat, lon)
         params = {
             "lat_range_of_plume_area": [43.0, 44.0],
             "lon_range_of_plume_area": [7.0, 8.0],
         }
-        cloud_mask, land_mask = derive_masks_from_bathymetry(full_bathy, reduced_bathy, params)
+        cloud_mask, land_mask = derive_masks_from_bathymetry(full_bathy, params)
         # Water pixels (negative bathy) should appear in cloud_mask
         self.assertTrue(bool(cloud_mask.sel(lat=43.0, lon=7.0, method="nearest")))
         # Land row should be True in land_mask
@@ -632,12 +630,11 @@ class DeriveMasksFromBathymetryTests(unittest.TestCase):
         lon = np.linspace(7.0, 8.0, 4)
         data = np.full((4, 4), -50.0)
         full_bathy = self._bathy_da(data, lat, lon)
-        reduced_bathy = self._bathy_da(data, lat, lon)
         params = {
             "lat_range_of_plume_area": [43.0, 44.0],
             "lon_range_of_plume_area": [7.0, 8.0],
         }
-        _, land_mask = derive_masks_from_bathymetry(full_bathy, reduced_bathy, params)
+        _, land_mask = derive_masks_from_bathymetry(full_bathy, params)
         self.assertFalse(land_mask.values.any())
 
 
@@ -680,31 +677,6 @@ class FindHighValuePixelsTests(unittest.TestCase):
         # Only the centre pixel (if any) should be True
         n_true = mask.values.sum()
         self.assertLessEqual(n_true, 1)
-
-
-# ---------------------------------------------------------------------------
-# reduce_resolution
-# ---------------------------------------------------------------------------
-
-class ReduceResolutionTests(unittest.TestCase):
-
-    def _ds(self, nrows, ncols, lat_step=0.01, lon_step=0.01):
-        lat = np.arange(nrows) * lat_step
-        lon = np.arange(ncols) * lon_step
-        data = np.ones((nrows, ncols))
-        return xr.Dataset({"spm": (["lat", "lon"], data)},
-                          coords={"lat": lat, "lon": lon})
-
-    def test_output_resolution_halved(self):
-        ds = self._ds(8, 8, lat_step=0.01, lon_step=0.01)
-        ds_reduced = reduce_resolution(ds, lat_bin_size_in_degree=0.02, lon_bin_size_in_degree=0.02)
-        self.assertEqual(ds_reduced.dims["lat"], 4)
-        self.assertEqual(ds_reduced.dims["lon"], 4)
-
-    def test_uniform_values_preserved_after_coarsening(self):
-        ds = self._ds(6, 6, lat_step=0.01, lon_step=0.01)
-        ds_reduced = reduce_resolution(ds, lat_bin_size_in_degree=0.02, lon_bin_size_in_degree=0.02)
-        np.testing.assert_allclose(ds_reduced["spm"].values, 1.0)
 
 
 # ---------------------------------------------------------------------------

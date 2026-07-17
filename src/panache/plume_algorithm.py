@@ -11,7 +11,6 @@ from .utils import (
     load_file,
     SEARCHING_STRATEGY_PRESETS,
 )
-from .io import NoValidMapDataError, load_map_data
 
 import os
 import gc
@@ -43,63 +42,6 @@ _OPPOSITE_FAN = {
 
 
 
-
-
-def reduce_resolution(ds, lat_bin_size_in_degree, lon_bin_size_in_degree):
-        
-    """
-    Reduce the spatial resolution of a dataset by aggregating it into larger bins.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        The input dataset with latitude (`lat`) and longitude (`lon`) coordinates.
-    lat_bin_size_in_degree : float
-        The desired bin size in degrees for the latitude dimension.
-    lon_bin_size_in_degree : float
-        The desired bin size in degrees for the longitude dimension.
-
-    Returns
-    -------
-    xarray.Dataset
-        A new dataset with reduced resolution, aggregated over the specified bin sizes.
-
-    Notes
-    -----
-    The function calculates the average spacing of latitude and longitude points in
-    the dataset and determines the aggregation factor required to achieve the specified
-    bin sizes. The `xarray.Dataset.coarsen` method is used to perform the aggregation.
-
-    Examples
-    --------
-    >>> import xarray as xr
-    >>> import numpy as np
-    >>> # Create a sample dataset
-    >>> lat = np.arange(-90, 91, 1)
-    >>> lon = np.arange(-180, 181, 1)
-    >>> data = np.random.rand(len(lat), len(lon))
-    >>> ds = xr.Dataset({"values": (["lat", "lon"], data)}, coords={"lat": lat, "lon": lon})
-    >>> # Reduce the resolution
-    >>> ds_reduced = reduce_resolution(ds, lat_bin_size_in_degree=5, lon_bin_size_in_degree=5)
-    >>> ds_reduced
-    <xarray.Dataset>
-    Dimensions:  (lat: 36, lon: 72)
-    Coordinates:
-      * lat      (lat) float64 -87.5 -82.5 -77.5 ... 77.5 82.5 87.5
-      * lon      (lon) float64 -177.5 -172.5 -167.5 ... 172.5 177.5
-    Data variables:
-        values   (lat, lon) float64 ...
-    """
-    
-    diff_lat = np.diff(np.unique(ds.lat)).mean()
-    diff_lon = np.diff(np.unique(ds.lon)).mean()
-    
-    lat_factor = round( lat_bin_size_in_degree / diff_lat )
-    lon_factor = round( lon_bin_size_in_degree / diff_lon )
-    
-    ds_reduced = ds.coarsen(lat=lat_factor, lon=lon_factor, boundary='trim').mean()
-    
-    return ds_reduced
 
 
 # Maximum steps used when relocating a NaN start pixel along the principal fan direction.
@@ -795,48 +737,6 @@ def Set_cloudy_regions_to_True(ds_reduced, mask_area, land_mask, SPM_threshold) 
             
     # Return the updated mask with the cloudy regions marked as part of the plume
     return mask_area
-
-
-def load_and_resize_files(file_name_config) : 
-    
-    """
-    Loads a file and resizes its map data based on the provided configuration.
-
-    Parameters
-    ----------
-    file_name_config : list
-        A list where:
-        - file_name_config[0] (str): The file path to load.
-        - file_name_config[1] (int): The desired width for resizing.
-        - file_name_config[2] (int): The desired height for resizing.
-
-    Returns
-    -------
-    numpy.ndarray
-        A resized version of the map data.
-    
-    Notes
-    -----
-    The function assumes the input file contains a dictionary-like structure
-    with a "Basin_map" key or directly contains "map_data". If "Basin_map" is present,
-    its "map_data" is used.
-    """
-    
-    # Load the file specified in the configuration.
-    data = load_file(file_name_config[0])
-    
-    # Check if the file contains a "Basin_map" key. If so, extract its value.
-    if 'Basin_map' in data : 
-        data = data['Basin_map']
-        
-    # Extract the "map_data" from the file contents.
-    data = data['map_data']
-    
-    # Resize the map data to the specified width and height.
-    resized_data = reduce_resolution(data, file_name_config[1], file_name_config[2])
-    
-    # Return the resized map data.
-    return resized_data
 
 
 def compute_gradient_with_directions_vectorized(spm_map, start_point, directions, max_steps, 
@@ -1759,7 +1659,6 @@ def create_polygon_mask(dataset, parameters) :
 
 def derive_masks_from_bathymetry(
     bathymetry_map,
-    reduced_bathymetry_map,
     parameters,
 ):
 
@@ -1767,15 +1666,11 @@ def derive_masks_from_bathymetry(
     Derive cloud-screening and land masks directly from bathymetry.
 
     Water pixels are defined as finite bathymetry values strictly below sea level.
-    The full-resolution water mask is used for cloud screening on the input map,
-    while the reduced-resolution land mask is used during plume delineation.
 
     Parameters
     ----------
     bathymetry_map : xarray.DataArray
-        Bathymetry aligned to the full-resolution input dataset.
-    reduced_bathymetry_map : xarray.DataArray
-        Bathymetry aligned to the reduced-resolution dataset used by the plume algorithm.
+        Bathymetry aligned to the input dataset.
     parameters : dict
         Configuration parameters for plume detection.
 
@@ -1786,7 +1681,7 @@ def derive_masks_from_bathymetry(
 
         - Boolean mask on the input grid where True represents water inside
           the cloud-checking area.
-        - Boolean mask on the reduced grid where True represents land.
+        - Boolean mask on the input grid where True represents land.
     """
 
     water_mask = bathymetry_map.notnull() & (bathymetry_map < 0)
@@ -1797,8 +1692,7 @@ def derive_masks_from_bathymetry(
         lon=slice(lon_bounds[0], lon_bounds[1]),
     )
 
-    reduced_water_mask = reduced_bathymetry_map.notnull() & (reduced_bathymetry_map < 0)
-    land_mask = ~reduced_water_mask
+    land_mask = ~water_mask
 
     return cloud_check_water_mask, land_mask
 
@@ -1971,11 +1865,17 @@ def _mask_with_time(mask, ds_reduced):
         Reduced-resolution SPM map; supplies coordinates and ``date_for_plot``.
     """
     base = xr.zeros_like(ds_reduced, dtype=bool) if mask is None else mask.astype(bool).copy()
+    # date_for_plot is superseded by the 'time' dimension assigned below; drop it here
+    # so every per-scene mask shares an identical coordinate set ahead of the batch-wide
+    # xr.concat in runner.py (concat raises if a non-dimension coord is present in some
+    # scenes but not others).
+    base = base.drop_vars('date_for_plot', errors='ignore')
     time_val = pd.to_datetime(ds_reduced.date_for_plot.values)
     return base.expand_dims({"time": [time_val]}).astype(np.int8)
 
 
 def main_process(file_name,
+                 ds,
                  parameters,
                  bathy_data_aligned,
                  cloud_check_water_mask,
@@ -1984,27 +1884,24 @@ def main_process(file_name,
                  output_stem,
                  dynamic_thresh,
                  coast_shape=None,
-                 variable_name=None,
                  precomputed_threshold=None,
-                 color_limits=None,
-                 lat_new_resolution=None,
-                 lon_new_resolution=None):
+                 color_limits=None):
     """
-    Process a single satellite data file for plume detection.
+    Process a single, already-loaded satellite data scene for plume detection.
 
-    This function detects and analyzes plumes in a satellite data file by
+    This function detects and analyzes plumes in a satellite data scene by
     applying thresholds, masks, and other criteria.
 
     Parameters
     ----------
     file_name : str
-        Path to the satellite data file.
-    file_names_pattern : str
-        Pattern for matching files in directories.
+        Path to the satellite data file (used only for output naming).
+    ds : xr.DataArray
+        Pre-loaded SPM map for this scene, as returned by ``load_map_data``.
     parameters : dict
         Configuration parameters for plume detection.
     bathymetry_data_aligned_to_reduced_map : xr.DataArray
-        Bathymetric data aligned to the reduced resolution.
+        Bathymetric data aligned to the input grid.
     coast_shapefolder : gpd.GeoDataFrame
         Shapefile of coastline for plotting.
     cloud_check_water_mask : xr.DataArray
@@ -2013,8 +1910,6 @@ def main_process(file_name,
         Mask identifying land pixels.
     inside_polygon_mask : xr.DataArray
         Mask to limit processing area inside a specific polygon.
-    variable_name : str, optional
-        Explicit NetCDF variable name to load from the input file.
 
     Returns
     -------
@@ -2028,29 +1923,17 @@ def main_process(file_name,
     # Ensure the directory for saving figures exists
     os.makedirs(f'{os.path.dirname(path_to_the_figure_file_to_save)}', exist_ok=True)
 
-    # Open and load the input map. Empty/all-NaN scenes are skipped by the batch.
-    try:
-        ds = load_map_data(file_name,
-                           lon_range=coordinate_range_bounds(parameters['lon_range_of_plume_area']),
-                           lat_range=coordinate_range_bounds(parameters['lat_range_of_plume_area']),
-                           variable_name=variable_name)
-    except NoValidMapDataError:
-        print(f"Skipping {os.path.basename(file_name)}: file contains no finite data values.", flush=True)
-        return None
-
-    # Reduce the resolution of the dataset to the specified latitude and longitude resolutions
-    ds_reduced = (reduce_resolution(ds, lat_new_resolution, lon_new_resolution)
-                  if lat_new_resolution is not None
-                  else ds)
+    scene_date = pd.Timestamp(ds.date_for_plot.values).strftime('%Y-%m-%d')
+    ds_reduced = ds
 
     all_mask_area = []
     thresholds = {key: None for key in parameters['starting_points']}
 
     # If the percentage of cloud coverage exceeds the specified threshold, return default values without processing the plume area
     if (Check_if_the_area_is_too_cloudy(ds, cloud_check_water_mask, parameters)):
-        
+
         # Plot the map with no plume area (due to clouds)
-        print(f"Skipping {os.path.basename(file_name)}: area is too cloudy.", flush=True)
+        print(f"Skipping {scene_date}: area is too cloudy.", flush=True)
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       parameters['lon_range_of_plume_area'],
                       parameters['lat_range_of_plume_area'],
@@ -2092,7 +1975,7 @@ def main_process(file_name,
     # If no valid plume area is detected, plot and return default values
     if not any(x.values.any() for x in all_mask_area):
         checked = ', '.join(parameters['starting_points'].keys())
-        print(f"No plume detected in {os.path.basename(output_stem)} for any starting point ({checked}); saving empty plot.", flush=True)
+        print(f"No plume detected for {scene_date} for any starting point ({checked}); saving empty plot.", flush=True)
         make_the_plot(path_to_the_figure_file_to_save, ds, ds_reduced,
                       lon_range_of_plume_area=parameters['lon_range_of_plume_area'],
                       lat_range_of_plume_area=parameters['lat_range_of_plume_area'],
