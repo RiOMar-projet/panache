@@ -39,7 +39,8 @@ pip-delete-this-directory.txt
 # Unit test / coverage reports
 htmlcov/
 testing/output/
-testing/smoke_tests/
+testing/smoke_tests/*
+!testing/smoke_tests/smoke_test_module.py
 testing/test_multi_plume_output/
 testing/test_single_file_plume_output/
 .tox/
