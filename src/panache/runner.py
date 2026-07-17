@@ -139,23 +139,16 @@ def compute_global_threshold(
     gb_needed = bytes_needed / 1e9
 
     print(f"\nComputing global SPM threshold ({quantile:.0%}-ile) and colourbar limits from {n} files.")
-    print(f"  Estimated peak RAM required: {gb_needed:.2f} GB", flush=True)
 
     if _HAS_PSUTIL:
-        available_gb = psutil.virtual_memory().available / 1e9
-        print(f"  Available RAM:              {available_gb:.2f} GB", flush=True)
         if bytes_needed > psutil.virtual_memory().available:
+            available_gb = psutil.virtual_memory().available / 1e9
             raise MemoryError(
                 f"Insufficient RAM to compute global threshold: need ~{gb_needed:.1f} GB "
                 f"but only {available_gb:.1f} GB is available. "
                 f"Set 'spm_threshold' in your config to provide a fixed value and skip "
                 f"pre-computation."
             )
-    else:
-        print(
-            "  (Install psutil to enable automatic RAM availability check.)",
-            flush=True,
-        )
 
     lon_range = coordinate_range_bounds(parameters["lon_range_of_plume_area"])
     lat_range = coordinate_range_bounds(parameters["lat_range_of_plume_area"])

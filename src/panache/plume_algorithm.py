@@ -1913,7 +1913,7 @@ def fast_delimitation_of_a_river_plume_area(spm_map, land_mask, start_point, SPM
                                                                                    start_point = start_point, 
                                                                                    directions = directions,
                                                                                    max_steps = max_steps, # Max steps for gradient expansion
-                                                                                   lower_high_values_to = np.min( [SPM_threshold*5, maximal_threshold] ),
+                                                                                   lower_high_values_to = (min(SPM_threshold * 5, maximal_threshold) if maximal_threshold is not None else SPM_threshold * 5),
                                                                                    create_X_intermediates_between_each_direction = 2) # Number of intermediate directions
 
     if gradient_values is None :
