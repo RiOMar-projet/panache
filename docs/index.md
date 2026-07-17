@@ -6,7 +6,7 @@
 :hidden:
 
 news
+api
 vignette_workflow
 vignette_masks
-api
 ```

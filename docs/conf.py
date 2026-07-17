@@ -38,6 +38,8 @@ html_static_path = ["_static"]
 html_theme_options = {
     "github_url": "https://github.com/RiOMar-projet/panache",
     "show_toc_level": 2,
+    "header_links_before_dropdown": 2,
+    "header_dropdown_text": "Vignettes",
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "icon_links": [
         {

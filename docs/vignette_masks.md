@@ -212,6 +212,11 @@ plt.tight_layout()
 plt.savefig("gulf_of_lion_2010_spm_timeseries.png", dpi=150)
 ```
 
+```{image} _static/images/vignette/gulf_of_lion_2010_spm_timeseries.png
+:alt: Gulf of Lion 2010 — in-plume SPM seasonal cycle
+:width: 100%
+```
+
 This approach works for any zone and any year. The only requirement is that
 the Sextant files covering the same period are available on disk. `PlumeMasks.nc`
 acts as a lightweight spatial index that can be applied to any gridded product
