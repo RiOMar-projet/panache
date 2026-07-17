@@ -3,8 +3,8 @@
 This page shows what a complete `panache` run looks like from config file to
 output, and demonstrates how plume detection varies across seasons and
 threshold methods. All images were produced from real L4 SPM satellite data
-(EUR-L4-SPIM-ATL-v01-fv01-OI) for **1 January 2025** (winter) and
-**1 July 2025** (summer). Each zone is shown under both the **dynamic
+(EUR-L4-SPIM-ATL-v01-fv01-OI) for **1 January 2024** (winter) and
+**1 July 2024** (summer). Each zone is shown under both the **dynamic
 gradient-based threshold** and the **global 95th-percentile (p95) threshold**,
 so the sensitivity difference between the two methods is immediately visible.
 
@@ -78,7 +78,7 @@ GULF_OF_LION/
 ├── manifest.csv      ← status of every input file
 ├── GIF.gif           ← animated overview (when gif: true)
 └── MAPS/
-    └── 20250101-EUR-L4-SPIM-ATL-v01-fv01-OI.png
+    └── 20240101-EUR-L4-SPIM-ATL-v01-fv01-OI.png
 ```
 
 Each PNG shows two panels: the raw SPM field (left) and the detected plume
@@ -102,35 +102,35 @@ river discharge and elevated SPM; summer discharge is lower and the plume
 footprint contracts. The bathymetric mask excludes very-shallow tidal flats
 near the Canal de Caen.
 
-**1 January 2025 — Winter**
+**1 January 2024 — Winter**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/bay_of_seine_20250101_dynamic.png
-:alt: Bay of Seine — 1 Jan 2025 — dynamic threshold
+```{image} _static/images/vignette/bay_of_seine_20240101_dynamic.png
+:alt: Bay of Seine — 1 Jan 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/bay_of_seine_20250101_p95.png
-:alt: Bay of Seine — 1 Jan 2025 — p95 threshold
+```{image} _static/images/vignette/bay_of_seine_20240101_p95.png
+:alt: Bay of Seine — 1 Jan 2024 — p95 threshold
 :width: 100%
 ```
 :::
 ::::
 
-**1 July 2025 — Summer**
+**1 July 2024 — Summer**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/bay_of_seine_20250701_dynamic.png
-:alt: Bay of Seine — 1 Jul 2025 — dynamic threshold
+```{image} _static/images/vignette/bay_of_seine_20240701_dynamic.png
+:alt: Bay of Seine — 1 Jul 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/bay_of_seine_20250701_p95.png
-:alt: Bay of Seine — 1 Jul 2025 — p95 threshold
+```{image} _static/images/vignette/bay_of_seine_20240701_p95.png
+:alt: Bay of Seine — 1 Jul 2024 — p95 threshold
 :width: 100%
 ```
 :::
@@ -145,35 +145,35 @@ the Sèvre Niortaise. The large Gironde plume typically dominates the northern
 shelf; winter cloud cover (shown as white patches in the left panel) can
 partially obscure the signal.
 
-**1 January 2025 — Winter**
+**1 January 2024 — Winter**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/bay_of_biscay_20250101_dynamic.png
-:alt: Bay of Biscay — 1 Jan 2025 — dynamic threshold
+```{image} _static/images/vignette/bay_of_biscay_20240101_dynamic.png
+:alt: Bay of Biscay — 1 Jan 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/bay_of_biscay_20250101_p95.png
-:alt: Bay of Biscay — 1 Jan 2025 — p95 threshold
+```{image} _static/images/vignette/bay_of_biscay_20240101_p95.png
+:alt: Bay of Biscay — 1 Jan 2024 — p95 threshold
 :width: 100%
 ```
 :::
 ::::
 
-**1 July 2025 — Summer**
+**1 July 2024 — Summer**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/bay_of_biscay_20250701_dynamic.png
-:alt: Bay of Biscay — 1 Jul 2025 — dynamic threshold
+```{image} _static/images/vignette/bay_of_biscay_20240701_dynamic.png
+:alt: Bay of Biscay — 1 Jul 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/bay_of_biscay_20250701_p95.png
-:alt: Bay of Biscay — 1 Jul 2025 — p95 threshold
+```{image} _static/images/vignette/bay_of_biscay_20240701_p95.png
+:alt: Bay of Biscay — 1 Jul 2024 — p95 threshold
 :width: 100%
 ```
 :::
@@ -189,35 +189,35 @@ is typically smaller and more confined to the immediate coastal zone. The
 dynamic threshold adapts per plume per scene; the p95 threshold is a single
 value computed from the full bounding box.
 
-**1 January 2025 — Winter**
+**1 January 2024 — Winter**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/gulf_of_lion_20250101_dynamic.png
-:alt: Gulf of Lion — 1 Jan 2025 — dynamic threshold
+```{image} _static/images/vignette/gulf_of_lion_20240101_dynamic.png
+:alt: Gulf of Lion — 1 Jan 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/gulf_of_lion_20250101_p95.png
-:alt: Gulf of Lion — 1 Jan 2025 — p95 threshold
+```{image} _static/images/vignette/gulf_of_lion_20240101_p95.png
+:alt: Gulf of Lion — 1 Jan 2024 — p95 threshold
 :width: 100%
 ```
 :::
 ::::
 
-**1 July 2025 — Summer**
+**1 July 2024 — Summer**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/gulf_of_lion_20250701_dynamic.png
-:alt: Gulf of Lion — 1 Jul 2025 — dynamic threshold
+```{image} _static/images/vignette/gulf_of_lion_20240701_dynamic.png
+:alt: Gulf of Lion — 1 Jul 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/gulf_of_lion_20250701_p95.png
-:alt: Gulf of Lion — 1 Jul 2025 — p95 threshold
+```{image} _static/images/vignette/gulf_of_lion_20240701_p95.png
+:alt: Gulf of Lion — 1 Jul 2024 — p95 threshold
 :width: 100%
 ```
 :::
@@ -232,35 +232,35 @@ largest rivers by discharge; the p95 threshold computed from summer data can
 sometimes exceed ambient SPM concentrations in low-flow conditions, resulting
 in no plume detected — a physically meaningful result rather than an error.
 
-**1 January 2025 — Winter**
+**1 January 2024 — Winter**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/southern_brittany_20250101_dynamic.png
-:alt: Southern Brittany — 1 Jan 2025 — dynamic threshold
+```{image} _static/images/vignette/southern_brittany_20240101_dynamic.png
+:alt: Southern Brittany — 1 Jan 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/southern_brittany_20250101_p95.png
-:alt: Southern Brittany — 1 Jan 2025 — p95 threshold
+```{image} _static/images/vignette/southern_brittany_20240101_p95.png
+:alt: Southern Brittany — 1 Jan 2024 — p95 threshold
 :width: 100%
 ```
 :::
 ::::
 
-**1 July 2025 — Summer**
+**1 July 2024 — Summer**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/southern_brittany_20250701_dynamic.png
-:alt: Southern Brittany — 1 Jul 2025 — dynamic threshold
+```{image} _static/images/vignette/southern_brittany_20240701_dynamic.png
+:alt: Southern Brittany — 1 Jul 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/southern_brittany_20250701_p95.png
-:alt: Southern Brittany — 1 Jul 2025 — p95 threshold
+```{image} _static/images/vignette/southern_brittany_20240701_p95.png
+:alt: Southern Brittany — 1 Jul 2024 — p95 threshold
 :width: 100%
 ```
 :::
@@ -272,39 +272,47 @@ in no plume detected — a physically meaningful result rather than an error.
 
 The Var is a small, steep-gradient Mediterranean river with a compact plume
 window. The Paillon estuary is tracked as a second river mouth in the same
-zone using custom `parameters` (rather than a `zone` preset). The coarse
-resolution of the L4 product means only a handful of pixels fall within the
-detection domain, so threshold sensitivity is especially apparent here.
+zone using custom `parameters` (rather than a `zone` preset). Because the L4
+product at 1 km resolution places only a handful of pixels within the detection
+domain, threshold sensitivity is especially pronounced here.
 
-**1 January 2025 — Winter**
+In winter the dynamic threshold can fall very low (≈0.3 g m⁻³), at which point
+the entire near-coastal domain exceeds the threshold and the mask floods outward
+to the domain boundary. Conversely, the p95 threshold (≈1.3 g m⁻³) may exceed
+all pixels near the river mouth, giving no detection. Neither result represents
+a detection failure in the software sense — both reflect genuine ambiguity in
+the SPM signal on this particular day. In summer the p95 threshold yields a
+compact, well-constrained plume shape.
+
+**1 January 2024 — Winter**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/var_20250101_dynamic.png
-:alt: Var — 1 Jan 2025 — dynamic threshold
+```{image} _static/images/vignette/var_20240101_dynamic.png
+:alt: Var — 1 Jan 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/var_20250101_p95.png
-:alt: Var — 1 Jan 2025 — p95 threshold
+```{image} _static/images/vignette/var_20240101_p95.png
+:alt: Var — 1 Jan 2024 — p95 threshold
 :width: 100%
 ```
 :::
 ::::
 
-**1 July 2025 — Summer**
+**1 July 2024 — Summer**
 
 ::::{grid} 2
 :::{grid-item-card} Dynamic threshold
-```{image} _static/images/vignette/var_20250701_dynamic.png
-:alt: Var — 1 Jul 2025 — dynamic threshold
+```{image} _static/images/vignette/var_20240701_dynamic.png
+:alt: Var — 1 Jul 2024 — dynamic threshold
 :width: 100%
 ```
 :::
 :::{grid-item-card} p95 threshold
-```{image} _static/images/vignette/var_20250701_p95.png
-:alt: Var — 1 Jul 2025 — p95 threshold
+```{image} _static/images/vignette/var_20240701_p95.png
+:alt: Var — 1 Jul 2024 — p95 threshold
 :width: 100%
 ```
 :::
