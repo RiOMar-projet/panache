@@ -479,7 +479,7 @@ def run_batch(config: RunConfig) -> Path:
     results_path = output_dir / "Results.csv"
     new_df = pd.DataFrame(new_stats)
 
-    if not config.overwrite and results_path.exists() and not new_df.empty:
+    if not config.overwrite and results_path.exists():
         try:
             old_df = pd.read_csv(results_path)
             if "date" in new_df.columns and "date" in old_df.columns:
